@@ -295,7 +295,7 @@ export function OptionsGroupsPage() {
                 id: `og-${Date.now()}`,
                 name: "Новая группа",
                 enabled: true,
-                channels: { inHallWaiter: true, inHallEmenu: true, preorder: true, delivery: true, pickup: true },
+                channels: { dineIn: true, preorder: true, delivery: true, pickup: true },
                 blocks: [],
               };
               setGroups((prev) => [...prev, newGroup]);

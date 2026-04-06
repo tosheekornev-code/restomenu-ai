@@ -3,12 +3,14 @@ import {
   Plus, X, ChevronDown, GripVertical, Trash2, Zap, Eye,
   RefreshCw, Search, CheckCircle2, AlertCircle,
   ChevronRight, Layers, Image, MoreVertical, ArrowUpDown,
-  Unlink, Link2, Copy, Pencil,
+  Unlink, Link2, Copy, Pencil, DollarSign, Save, HelpCircle,
 } from "lucide-react";
 import {
   PropertySet, PropertyValue, PositionVariant, Position,
   propertySets as globalSets, positions as allPositions,
+  Availability, CHANNELS, ChannelAvailability, cities,
 } from "../data/mockData";
+import { AvailabilitySection } from "./AvailabilitySection";
 import { Toggle } from "./shared/Toggle";
 import { toast } from "./shared/Toast";
 
@@ -20,6 +22,7 @@ interface VariantsTabProps {
   initialVariants?: PositionVariant[];
   onChange?: (sets: PropertySet[], variants: PositionVariant[]) => void;
   onDetachVariant?: (variant: PositionVariant, label: string) => void;
+  onGoToPrices?: () => void;
 }
 
 const WEIGHT_UNITS = ["г", "мл", "кг", "л", "шт", "порц"] as const;
@@ -278,67 +281,198 @@ function SetPickerDropdown({ usedIds, onSelect, onCreateNew, onClose }: {
 }
 
 // ─── Manage Properties Modal ─────────────────────────────────────────────────
+type EditingSet = { id: string | null; name: string; internalName: string; showName: boolean; displayType: PropertySet["displayType"]; values: { id: string; name: string; color?: string }[] };
+
+const EMPTY_FORM: EditingSet = { id: null, name: "", internalName: "", showName: true, displayType: "chips", values: [] };
+
 function ManagePropertiesModal({ sets, onSetsChange, onClose }: {
   sets: PropertySet[];
   onSetsChange: (updated: PropertySet[]) => void;
   onClose: () => void;
 }) {
-  const [showPicker, setShowPicker] = useState(false);
+  const [form, setForm] = useState<EditingSet | null>(null);
+  const [newValueName, setNewValueName] = useState("");
 
-  const handleAddSet = (set: PropertySet) => {
-    const copy: PropertySet = { ...set, values: set.values.map((v) => ({ ...v })) };
-    onSetsChange([...sets, copy]);
+  const openCreate = () => setForm({ ...EMPTY_FORM });
+  const openEdit = (set: PropertySet) => setForm({ id: set.id, name: set.name, internalName: set.name, showName: false, displayType: set.displayType, values: set.values.map((v) => ({ ...v })) });
+
+  const addFormValue = () => {
+    const t = newValueName.trim();
+    if (!t || !form) return;
+    setForm({ ...form, values: [...form.values, { id: `psv-${Date.now()}`, name: t }] });
+    setNewValueName("");
   };
 
-  const handleCreateNew = () => {
-    onSetsChange([...sets, { id: `ps-custom-${Date.now()}`, name: "Новый набор", displayType: "chips" as const, values: [] }]);
+  const saveForm = () => {
+    if (!form || !form.name.trim()) return;
+    if (form.id) {
+      onSetsChange(sets.map((s) => s.id === form.id ? { ...s, name: form.name, displayType: form.displayType, values: form.values } : s));
+    } else {
+      onSetsChange([...sets, { id: `ps-custom-${Date.now()}`, name: form.name, displayType: form.displayType, values: form.values }]);
+    }
+    setForm(null);
   };
 
   return (
     <>
       <div className="fixed inset-0 z-20 bg-black/40" onClick={onClose} />
       <div className="fixed inset-0 z-30 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-            <div>
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex" style={{ width: form ? 860 : 480, maxHeight: "85vh" }}>
+
+          {/* ── Left: list ── */}
+          <div className="flex flex-col w-[480px] shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
               <h3 className="text-[15px] font-semibold text-gray-900">Управление свойствами</h3>
-              <p className="text-[12px] text-gray-500 mt-0.5">Настройте наборы и значения для генерации вариантов</p>
-            </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
-              <X size={16} className="text-gray-500" />
-            </button>
-          </div>
-          <div className="overflow-y-auto flex-1 p-5 space-y-3">
-            {sets.map((set) => (
-              <PropertySetCard
-                key={set.id}
-                set={set}
-                onChange={(u) => onSetsChange(sets.map((s) => s.id === u.id ? u : s))}
-                onRemove={() => onSetsChange(sets.filter((s) => s.id !== set.id))}
-              />
-            ))}
-            {sets.length === 0 && (
-              <div className="text-center py-8 text-[13px] text-gray-400">
-                Нет наборов свойств. Добавьте первый.
-              </div>
-            )}
-          </div>
-          <div className="px-5 py-4 border-t border-gray-100 shrink-0">
-            <div className="relative">
-              <button onClick={() => setShowPicker(!showPicker)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-300 text-gray-500 rounded-xl text-[13px] hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-colors">
-                <Plus size={15} /> Добавить набор свойств
+              <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X size={16} className="text-gray-500" />
               </button>
-              {showPicker && (
-                <SetPickerDropdown
-                  usedIds={sets.map((s) => s.id)}
-                  onSelect={(s) => { handleAddSet(s); setShowPicker(false); }}
-                  onCreateNew={() => { handleCreateNew(); setShowPicker(false); }}
-                  onClose={() => setShowPicker(false)}
-                />
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-2">
+              {sets.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                  <Layers size={32} className="text-gray-200 mb-3" />
+                  <p className="text-[13px] text-gray-400 mb-1">Еще не создано свойств</p>
+                  <p className="text-[12px] text-gray-400">Добавьте свойства товара, такие как<br />размер, начинка, количество, тесто...</p>
+                  <div className="mt-4 border-t border-dashed border-gray-200 w-8 mx-auto" />
+                  <div className="mt-1 text-[11px] text-gray-300">↓</div>
+                </div>
               )}
+              {sets.map((set, idx) => (
+                <div key={set.id} className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${form?.id === set.id ? "bg-orange-50/40" : ""}`}>
+                  <span className="text-[11px] text-gray-400 font-mono mt-0.5 w-7 shrink-0">{String(idx + 1).padStart(3, "0")}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[13px] font-medium text-gray-800">{set.name}</span>
+                      <span className="text-[11px] text-gray-400">вид: {DISPLAY_TYPES.find(d => d.value === set.displayType)?.label.toLowerCase()}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {set.values.map((v) => (
+                        <span key={v.id} className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{v.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEdit(set)} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors" title="Редактировать">
+                      <Pencil size={13} className="text-gray-400" />
+                    </button>
+                    <button onClick={() => onSetsChange(sets.filter((s) => s.id !== set.id))} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Удалить">
+                      <X size={13} className="text-gray-400 hover:text-red-500" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100 shrink-0">
+              <button onClick={openCreate}
+                className="w-full flex items-center justify-center gap-2 py-2.5 text-[13px] text-green-600 font-medium hover:bg-green-50 rounded-xl transition-colors">
+                <Plus size={15} /> Создать свойство
+              </button>
             </div>
           </div>
+
+          {/* ── Right: form ── */}
+          {form && (
+            <div className="w-[380px] border-l border-gray-100 flex flex-col shrink-0">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <h3 className="text-[14px] font-semibold text-gray-900">
+                  {form.id ? "Редактирование свойства" : "Создание свойства"}
+                </h3>
+                <button onClick={() => setForm(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  <X size={15} className="text-gray-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* Names */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                      Название свойства <span className="text-red-500">*</span>
+                    </label>
+                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="Выберите размер"
+                      className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
+                      Внутреннее название
+                      <HelpCircle size={11} className="text-gray-400" />
+                    </label>
+                    <input value={form.internalName} onChange={(e) => setForm({ ...form, internalName: e.target.value })}
+                      placeholder="Размер пицц"
+                      className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                </div>
+
+                {/* Show name toggle */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <div>
+                    <div className="text-[13px] font-medium text-gray-800">Показывать название</div>
+                    <div className="text-[11px] text-gray-500">Если включить — клиент будет видеть название</div>
+                  </div>
+                  <Toggle checked={form.showName} onChange={(v) => setForm({ ...form, showName: v })} size="sm" />
+                </div>
+
+                {/* Display type */}
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                    Вид отображения <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select value={form.displayType} onChange={(e) => setForm({ ...form, displayType: e.target.value as PropertySet["displayType"] })}
+                      className="w-full px-3 py-2.5 text-[13px] border border-gray-200 rounded-xl bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-orange-300 pr-8">
+                      {DISPLAY_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Values */}
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    Добавление значений
+                    <HelpCircle size={11} className="text-gray-400" />
+                  </label>
+                  <p className="text-[11px] text-gray-400 mb-3">
+                    При добавлении свойства к товару, варианты создадутся автоматически, на основе заданных значений.
+                    Добавьте значения (пример: 25 см, 32 см ...)
+                  </p>
+                  <div className="space-y-2">
+                    {form.values.map((v, i) => (
+                      <div key={v.id} className="flex items-center gap-2">
+                        <GripVertical size={13} className="text-gray-300 shrink-0" />
+                        <input value={v.name}
+                          onChange={(e) => setForm({ ...form, values: form.values.map((fv, fi) => fi === i ? { ...fv, name: e.target.value } : fv) })}
+                          className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                        <button onClick={() => setForm({ ...form, values: form.values.filter((_, fi) => fi !== i) })}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 border-2 border-dashed border-gray-200 rounded-xl px-3 py-2 hover:border-green-400 transition-colors">
+                      <input value={newValueName} onChange={(e) => setNewValueName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") addFormValue(); }}
+                        placeholder="Добавить значение"
+                        className="flex-1 text-[13px] text-gray-600 bg-transparent focus:outline-none placeholder:text-gray-400" />
+                      {newValueName && (
+                        <button onClick={addFormValue} className="text-green-600 hover:text-green-700 font-medium text-[12px]">↵</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 shrink-0">
+                <button onClick={saveForm} disabled={!form.name.trim()}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-[13px] font-semibold text-white bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-colors">
+                  <Save size={15} /> Сохранить
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -536,13 +670,6 @@ function BulkPriceEditor({ variants, sets, onApply, onClose }: {
 }
 
 // ─── Variant Detail Panel ─────────────────────────────────────────────────────
-const VARIANT_CHANNELS = [
-  { key: "inHallWaiter" as const, label: "Официант",  desc: "Заказ через персонал в зале" },
-  { key: "inHallEmenu"  as const, label: "Э-меню",    desc: "QR-меню на столе" },
-  { key: "preorder"     as const, label: "Предзаказ", desc: "При бронировании столика" },
-  { key: "delivery"     as const, label: "Доставка",  desc: "Доставка по адресу" },
-  { key: "pickup"       as const, label: "Самовывоз", desc: "Клиент забирает сам" },
-];
 
 function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
   variant: PositionVariant;
@@ -557,7 +684,7 @@ function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
   return (
     <>
       <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-30 w-[460px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed right-0 top-0 bottom-0 z-30 w-[560px] bg-white shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 shrink-0">
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600">
@@ -618,22 +745,21 @@ function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
           )}
 
           {tab === "availability" && (
-            <div className="space-y-2">
-              <p className="text-[12px] text-gray-500 mb-4">В каких каналах доступен этот вариант</p>
-              {VARIANT_CHANNELS.map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                  <div>
-                    <div className="text-[13px] font-medium text-gray-800">{label}</div>
-                    <div className="text-[11px] text-gray-500">{desc}</div>
-                  </div>
-                  <Toggle
-                    checked={channels[key] !== false}
-                    onChange={(val) => onUpdate({ ...variant, channels: { ...channels, [key]: val } })}
-                    size="sm"
-                  />
-                </div>
-              ))}
-            </div>
+            <AvailabilitySection
+              availability={variant.availability ?? {
+                everywhere: true,
+                cities: cities.map((city) => ({
+                  cityId: city.id,
+                  locations: city.locations.map((loc) => ({
+                    locationId: loc.id,
+                    enabled: true,
+                    channels: Object.fromEntries(CHANNELS.map((c) => [c.key, true])) as ChannelAvailability,
+                  })),
+                })),
+                schedule: { type: "daily", allDay: true },
+              }}
+              onChange={(avail) => onUpdate({ ...variant, availability: avail })}
+            />
           )}
 
           {tab === "discount" && (
@@ -1051,7 +1177,7 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
 export function VariantsTab({
   positionName, positionId,
   initialSets = [], initialVariants = [],
-  onChange, onDetachVariant,
+  onChange, onDetachVariant, onGoToPrices,
 }: VariantsTabProps) {
   const [linkedSets, setLinkedSets] = useState<PropertySet[]>(initialSets);
   const [variants, setVariants] = useState<PositionVariant[]>(initialVariants);
@@ -1243,10 +1369,19 @@ export function VariantsTab({
       {hasGenerated && variants.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[13px] font-semibold text-gray-800">Варианты</h3>
+            <h3 className="text-[15px] font-semibold text-gray-800">Варианты</h3>
             <span className="text-[11px] text-gray-400">Клик по ячейке — редактировать · Потяните строку — изменить порядок</span>
           </div>
           <VariantsTable variants={variants} sets={linkedSets} onChange={handleVariantsChange} onDetachVariant={onDetachVariant} onEditVariant={setEditingVariant} />
+          <div className="mt-3 flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[12px] text-gray-500">
+            <DollarSign size={13} className="text-gray-400 shrink-0" />
+            Цены по городам, точкам и каналам настраиваются на вкладке{" "}
+            {onGoToPrices ? (
+              <button onClick={onGoToPrices} className="hover:text-gray-700 transition-colors">«Цены»</button>
+            ) : (
+              <span>«Цены»</span>
+            )}
+          </div>
         </div>
       )}
 

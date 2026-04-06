@@ -4,7 +4,7 @@ import {
   AlertTriangle, ChevronDown, Tag, Scale, Layers,
   ArrowLeft, ChevronRight, LayoutGrid, DollarSign,
   Package, Puzzle, Globe2, Image, Copy, Trash2,
-  Check, PenLine,
+  Check, PenLine, Undo2,
 } from "lucide-react";
 import {
   Position, Availability, categories, optionGroups,
@@ -34,8 +34,8 @@ const PRICE_TYPES = [
 
 const NAV_ITEMS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "basic", label: "Основное", icon: <LayoutGrid size={16} /> },
-  { key: "prices", label: "Цены", icon: <DollarSign size={16} /> },
   { key: "variants", label: "Варианты", icon: <Package size={16} /> },
+  { key: "prices", label: "Цены", icon: <DollarSign size={16} /> },
   { key: "options", label: "Доп. опции", icon: <Puzzle size={16} /> },
   { key: "availability", label: "Доступность", icon: <Globe2 size={16} /> },
 ];
@@ -60,6 +60,7 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
   const defaultVariants = position?.variants ?? (position?.priceType === "variants" ? pizzaVariants : []);
   const [variantSets, setVariantSets] = useState<PropertySet[]>(defaultSets);
   const [variantList, setVariantList] = useState<PositionVariant[]>(defaultVariants);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
 
   const defaultOverrides = position?.priceOverrides
     ?? (position?.priceType === "variants" ? pizzaPriceOverrides
@@ -495,7 +496,7 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {/* ── PRICES ─────────────────────────────── */}
             {tab === "prices" && (
               <>
-                <h2 className="text-[16px] font-semibold text-gray-900 mb-5">Гео-ценообразование</h2>
+                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Гео-ценообразование</h2>
                 <PricesTab
                   isVariants={hasVariants}
                   basePrice={parseFloat(price) || 0}
@@ -511,7 +512,15 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {/* ── VARIANTS ───────────────────────────── */}
             {tab === "variants" && (
               <>
-                <h2 className="text-[16px] font-semibold text-gray-900 mb-5">Варианты товара</h2>
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-[20px] font-semibold text-gray-900">Варианты товара</h2>
+                  {variantList.length > 0 && (
+                    <button onClick={() => setShowConvertDialog(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors">
+                      <Undo2 size={13} /> Вернуть обычный товар
+                    </button>
+                  )}
+                </div>
                 <VariantsTab
                   positionName={name || position?.name || "позиция"}
                   positionId={position?.id}
@@ -528,14 +537,61 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
                     if (updated.length === 0) setPriceType("fixed");
                     toast(`Вариант «${label}» будет создан как отдельный товар`, "success");
                   }}
+                  onGoToPrices={() => setTab("prices")}
                 />
+
+                {showConvertDialog && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+                      <div className="px-6 py-5 border-b border-gray-100">
+                        <h3 className="text-[16px] font-semibold text-gray-900">Вернуть обычный товар?</h3>
+                        <p className="text-[13px] text-gray-500 mt-1">
+                          Товар перестанет быть вариантным. Что сделать с {variantList.length} вариантами?
+                        </p>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <button onClick={() => {
+                          setVariantList([]); setVariantSets([]); setPriceType("fixed");
+                          setShowConvertDialog(false);
+                          toast("Товар преобразован в обычный, варианты удалены", "success");
+                        }} className="w-full flex items-start gap-3 px-4 py-3 border-2 border-gray-200 rounded-xl hover:border-red-300 hover:bg-red-50 transition-colors text-left group">
+                          <Trash2 size={16} className="text-gray-400 group-hover:text-red-500 mt-0.5 shrink-0" />
+                          <div>
+                            <div className="text-[13px] font-medium text-gray-800 group-hover:text-red-700">Удалить все варианты</div>
+                            <div className="text-[12px] text-gray-500">Варианты будут безвозвратно удалены</div>
+                          </div>
+                        </button>
+                        <button onClick={() => {
+                          variantList.forEach((v) => {
+                            const label = variantSets.map((s) => s.values.find((val) => val.id === v.properties[s.id])?.name ?? "?").join(" / ");
+                            toast(`«${label}» будет создан как отдельный товар`, "success");
+                          });
+                          setVariantList([]); setVariantSets([]); setPriceType("fixed");
+                          setShowConvertDialog(false);
+                        }} className="w-full flex items-start gap-3 px-4 py-3 border-2 border-gray-200 rounded-xl hover:border-orange-300 hover:bg-orange-50 transition-colors text-left group">
+                          <Copy size={16} className="text-gray-400 group-hover:text-orange-500 mt-0.5 shrink-0" />
+                          <div>
+                            <div className="text-[13px] font-medium text-gray-800 group-hover:text-orange-700">Открепить как отдельные товары</div>
+                            <div className="text-[12px] text-gray-500">Каждый вариант станет самостоятельной позицией</div>
+                          </div>
+                        </button>
+                      </div>
+                      <div className="px-4 pb-4">
+                        <button onClick={() => setShowConvertDialog(false)}
+                          className="w-full py-2.5 text-[13px] text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
             {/* ── OPTIONS ────────────────────────────── */}
             {tab === "options" && (
               <>
-                <h2 className="text-[16px] font-semibold text-gray-900 mb-5">Группы дополнительных опций</h2>
+                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Группы дополнительных опций</h2>
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
                     <Info size={15} className="text-blue-600 mt-0.5 shrink-0" />
@@ -612,7 +668,7 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {/* ── AVAILABILITY ───────────────────────── */}
             {tab === "availability" && (
               <>
-                <h2 className="text-[16px] font-semibold text-gray-900 mb-5">Настройки доступности</h2>
+                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Настройки доступности</h2>
                 <div className="space-y-5">
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
                     <Info size={15} className="text-orange-600 mt-0.5 shrink-0" />

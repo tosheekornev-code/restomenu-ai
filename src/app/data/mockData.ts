@@ -1,6 +1,5 @@
 export interface ChannelAvailability {
-  inHallWaiter: boolean;   // В зале (официант)
-  inHallEmenu: boolean;    // В зале (э-меню)
+  dineIn: boolean;         // За стол (официант + э-меню)
   preorder: boolean;       // Предзаказ при брони
   delivery: boolean;       // Доставка
   pickup: boolean;         // Самовывоз
@@ -15,22 +14,15 @@ export const CHANNELS: {
   description: string;
 }[] = [
   {
-    key: "inHallWaiter",
-    label: "В зале (официант)",
-    shortLabel: "Официант",
+    key: "dineIn",
+    label: "За стол",
+    shortLabel: "За стол",
     color: "bg-blue-100 text-blue-700",
-    description: "Клиент делает заказ через официанта при бронировании стола или визите",
-  },
-  {
-    key: "inHallEmenu",
-    label: "В зале (э-меню)",
-    shortLabel: "Э-меню",
-    color: "bg-indigo-100 text-indigo-700",
-    description: "Гость сканирует QR-код на столе и делает заказ самостоятельно",
+    description: "Заказ в зале — через официанта или э-меню",
   },
   {
     key: "preorder",
-    label: "Предзаказ при брони",
+    label: "Предзаказ",
     shortLabel: "Предзаказ",
     color: "bg-amber-100 text-amber-700",
     description: "Клиент делает предзаказ заранее при онлайн-бронировании столика",
@@ -173,13 +165,13 @@ export interface PositionVariant {
   isDefault?: boolean;
   sortOrder?: number;
   channels?: {
-    inHallWaiter?: boolean;
-    inHallEmenu?: boolean;
+    dineIn?: boolean;
     preorder?: boolean;
     delivery?: boolean;
     pickup?: boolean;
   };
   discount?: { type: "pct" | "rub"; value: number };
+  availability?: Availability;
 }
 
 // ─── PRICE OVERRIDES (geo-pricing) ────────────────────────────────────────────
@@ -288,24 +280,21 @@ export const cities: City[] = [
 ];
 
 const defaultChannels: ChannelAvailability = {
-  inHallWaiter: true,
-  inHallEmenu: true,
+  dineIn: true,
   preorder: true,
   delivery: true,
   pickup: true,
 };
 
 const deliveryOnlyChannels: ChannelAvailability = {
-  inHallWaiter: false,
-  inHallEmenu: false,
+  dineIn: false,
   preorder: false,
   delivery: true,
   pickup: true,
 };
 
 const inHallOnlyChannels: ChannelAvailability = {
-  inHallWaiter: true,
-  inHallEmenu: true,
+  dineIn: true,
   preorder: false,
   delivery: false,
   pickup: false,
@@ -736,7 +725,7 @@ export const goList: GoListEntry[] = [
     categoryHint: "Роллы",
     badge: "recommendation",
     locationIds: ["loc-1"],
-    channels: ["inHallWaiter", "inHallEmenu"],
+    channels: ["dineIn"],
     priority: 4,
     addedBy: "Шеф-повар Г.",
     addedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
