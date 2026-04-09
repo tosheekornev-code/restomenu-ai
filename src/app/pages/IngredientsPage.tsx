@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus, Search, Filter as FilterIcon, Leaf, X, Save,
   Info, Pencil, Trash2, ChevronDown, AlertCircle,
@@ -106,16 +107,6 @@ const mockFilters: IngredientFilter[] = [
   },
 ];
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex w-9 h-5 rounded-full transition-colors cursor-pointer ${checked ? "bg-green-500" : "bg-gray-300"}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-    </button>
-  );
-}
 
 // ─── Filter Card ──────────────────────────────────────────────────────────────
 function FilterCard({ filter, onToggle, onRemove }: {
@@ -166,7 +157,7 @@ function FilterCard({ filter, onToggle, onRemove }: {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Toggle checked={filter.active} onChange={() => onToggle(filter.id)} />
+          <Switch checked={filter.active} onCheckedChange={() => onToggle(filter.id)} />
           <button className="p-1.5 hover:bg-gray-100 rounded-lg">
             <Pencil size={13} className="text-gray-400" />
           </button>

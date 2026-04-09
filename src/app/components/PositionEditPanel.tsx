@@ -12,7 +12,7 @@ import {
   propertySets as globalSets, pizzaVariants, pizzaPriceOverrides, rollPriceOverrides,
 } from "../data/mockData";
 import { AvailabilitySection } from "./AvailabilitySection";
-import { Toggle } from "./shared/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "./shared/Toast";
 import { ConfirmDialog } from "./shared/ConfirmDialog";
 import { VariantsTab } from "./VariantsTab";
@@ -62,10 +62,13 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
   const [variantList, setVariantList] = useState<PositionVariant[]>(defaultVariants);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
 
+  const [baseChannelPrices, setBaseChannelPrices] = useState<Record<string, number>>({});
+
   const defaultOverrides = position?.priceOverrides
     ?? (position?.priceType === "variants" ? pizzaPriceOverrides
       : (position?.id === "pos-1" ? rollPriceOverrides : []));
   const [priceOverrides, setPriceOverrides] = useState<PriceOverride[]>(defaultOverrides);
+  const [priceSurcharges, setPriceSurcharges] = useState<import("../data/mockData").PricingSurcharge[]>([]);
   const [linkedGroupIds, setLinkedGroupIds] = useState<string[]>(position?.optionGroupIds ?? []);
   const [inheritFromCategory, setInheritFromCategory] = useState(position?.availability.inheritFromCategory ?? true);
   const [availability, setAvailability] = useState<Availability>(
@@ -155,7 +158,7 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
 
         {/* Status toggle */}
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${enabled ? "bg-green-50 border-green-200" : "bg-gray-100 border-gray-200"}`}>
-          <Toggle checked={enabled} onChange={setEnabled} size="sm" />
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
           <span className={`text-[12px] font-medium ${enabled ? "text-green-700" : "text-gray-500"}`}>
             {enabled ? "Активна" : "Скрыта"}
           </span>
@@ -269,7 +272,6 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
                       {badge}
                     </span>
                   )}
-                  {active && <div className="w-1 h-1 rounded-full bg-orange-500 shrink-0" />}
                 </button>
               );
             })}
@@ -496,15 +498,25 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {/* ── PRICES ─────────────────────────────── */}
             {tab === "prices" && (
               <>
-                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Гео-ценообразование</h2>
+                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Управление ценами</h2>
                 <PricesTab
                   isVariants={hasVariants}
+                  positionName={name || position?.name}
                   basePrice={parseFloat(price) || 0}
                   onBasePriceChange={(p) => setPrice(String(p))}
+                  baseChannelPrices={baseChannelPrices}
+                  onBaseChannelPriceChange={(ch, p) => setBaseChannelPrices((prev) => {
+                    const next = { ...prev };
+                    if (p === undefined) delete next[ch]; else next[ch] = p;
+                    return next;
+                  })}
                   variants={variantList}
                   variantSets={variantSets}
                   priceOverrides={priceOverrides}
                   onChange={setPriceOverrides}
+                  onVariantPriceChange={(vid, p) => setVariantList((prev) => prev.map((v) => v.id === vid ? { ...v, price: p } : v))}
+                  surcharges={priceSurcharges}
+                  onSurchargesChange={setPriceSurcharges}
                 />
               </>
             )}

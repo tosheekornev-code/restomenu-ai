@@ -10,7 +10,7 @@ import {
   propertySets as globalSets, PropertySet, PositionVariant,
 } from "../data/mockData";
 import { PositionEditPanel } from "../components/PositionEditPanel";
-import { Toggle } from "../components/shared/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { toast } from "../components/shared/Toast";
 import { getVariantLabel } from "../components/VariantsTab";
@@ -455,7 +455,7 @@ export function PositionsPage() {
 
                         <td className="py-3">
                           <div className="flex items-center gap-1.5 justify-end">
-                            <Toggle checked={pos.enabled} onChange={(v) => handleToggleEnabled(pos.id, v)} size="sm" />
+                            <Switch checked={pos.enabled} onCheckedChange={(v) => handleToggleEnabled(pos.id, v)} size="sm" />
                             <button onClick={() => setEditingPos(pos)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" title="Редактировать">
                               <Pencil size={14} className="text-gray-400 hover:text-gray-600" />
                             </button>
@@ -530,12 +530,12 @@ export function PositionsPage() {
                             {/* Actions */}
                             <td className="py-2">
                               <div className="flex items-center gap-1 justify-end">
-                                <Toggle checked={variant.enabled}
-                                  onChange={(v) => setPositions((prev) => prev.map((p) => p.id === pos.id ? {
+                                <Switch checked={variant.enabled}
+                                  onCheckedChange={(v) => setPositions((prev) => prev.map((p) => p.id === pos.id ? {
                                     ...p,
                                     variants: p.variants?.map((vt) => vt.id === variant.id ? { ...vt, enabled: v } : vt),
                                   } : p))}
-                                  size="xs" />
+                                  size="sm" />
                                 <button onClick={() => setEditingPos(pos)}
                                   className="p-1 hover:bg-gray-100 rounded-lg transition-colors" title="Редактировать вариант">
                                   <Pencil size={12} className="text-gray-300 hover:text-gray-500" />

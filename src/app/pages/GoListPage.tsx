@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus, Star, TrendingUp, Sparkles, X, ChevronDown,
   Info, MapPin, Clock, GripVertical, Pencil,
@@ -63,16 +64,6 @@ function ChannelChips({ channels }: { channels: (keyof ChannelAvailability)[] | 
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex w-9 h-5 rounded-full transition-colors cursor-pointer ${checked ? "bg-green-500" : "bg-gray-300"}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-    </button>
-  );
-}
 
 // ─── Add Modal ────────────────────────────────────────────────────────────────
 function AddGoModal({ onClose, onAdd }: {
@@ -325,7 +316,7 @@ function GoListCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 shrink-0">
-        <Toggle checked={entry.active} onChange={() => onToggle(entry.id)} />
+        <Switch checked={entry.active} onCheckedChange={() => onToggle(entry.id)} />
         <button className="p-1.5 hover:bg-gray-100 rounded-lg">
           <Pencil size={13} className="text-gray-400" />
         </button>

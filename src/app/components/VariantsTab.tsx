@@ -12,6 +12,7 @@ import {
 } from "../data/mockData";
 import { AvailabilitySection } from "./AvailabilitySection";
 import { Toggle } from "./shared/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "./shared/Toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -412,7 +413,7 @@ function ManagePropertiesModal({ sets, onSetsChange, onClose }: {
                     <div className="text-[13px] font-medium text-gray-800">Показывать название</div>
                     <div className="text-[11px] text-gray-500">Если включить — клиент будет видеть название</div>
                   </div>
-                  <Toggle checked={form.showName} onChange={(v) => setForm({ ...form, showName: v })} size="sm" />
+                  <Switch checked={form.showName} onCheckedChange={(v) => setForm({ ...form, showName: v })} />
                 </div>
 
                 {/* Display type */}
@@ -671,9 +672,100 @@ function BulkPriceEditor({ variants, sets, onApply, onClose }: {
 
 // ─── Variant Detail Panel ─────────────────────────────────────────────────────
 
-function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
+// ─── Variant Photos Editor ───────────────────────────────────────────────────
+function VariantPhotosEditor({ photos, onChange }: { photos: string[]; onChange: (urls: string[]) => void }) {
+  const [addingUrl, setAddingUrl] = useState(false);
+  const [newUrl, setNewUrl] = useState("");
+
+  const addPhoto = () => {
+    const url = newUrl.trim();
+    if (url) {
+      onChange([...photos, url]);
+      setNewUrl("");
+      setAddingUrl(false);
+    }
+  };
+
+  const removePhoto = (idx: number) => onChange(photos.filter((_, i) => i !== idx));
+
+  const movePhoto = (from: number, to: number) => {
+    if (to < 0 || to >= photos.length) return;
+    const updated = [...photos];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    onChange(updated);
+  };
+
+  return (
+    <div>
+      <label className="block text-[12px] font-medium text-gray-700 mb-2">Фотографии</label>
+      <div className="flex flex-wrap gap-2">
+        {photos.map((url, idx) => (
+          <div key={`${url}-${idx}`} className="relative group w-20 h-20 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+            <img src={url} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            {idx === 0 && (
+              <span className="absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-medium bg-orange-500 text-white rounded-md">
+                Главное
+              </span>
+            )}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+              {idx > 0 && (
+                <button onClick={() => movePhoto(idx, idx - 1)}
+                  className="p-1 bg-white/90 rounded-lg text-gray-700 hover:bg-white text-[11px]">←</button>
+              )}
+              {idx < photos.length - 1 && (
+                <button onClick={() => movePhoto(idx, idx + 1)}
+                  className="p-1 bg-white/90 rounded-lg text-gray-700 hover:bg-white text-[11px]">→</button>
+              )}
+              <button onClick={() => removePhoto(idx)}
+                className="p-1 bg-red-500/90 rounded-lg text-white hover:bg-red-600">
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {/* Add button */}
+        {addingUrl ? (
+          <div className="w-full mt-1">
+            <div className="flex gap-2">
+              <input autoFocus value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addPhoto(); if (e.key === "Escape") { setAddingUrl(false); setNewUrl(""); } }}
+                placeholder="https://..."
+                className="flex-1 px-3 py-2 text-[12px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+              <button onClick={addPhoto}
+                className="px-3 py-2 text-[12px] font-medium bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors">
+                Добавить
+              </button>
+              <button onClick={() => { setAddingUrl(false); setNewUrl(""); }}
+                className="px-3 py-2 text-[12px] text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">
+                Отмена
+              </button>
+            </div>
+            {newUrl && (
+              <div className="mt-2 w-full h-24 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                <img src={newUrl} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <button onClick={() => setAddingUrl(true)}
+            className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-orange-400 hover:text-orange-500 transition-colors cursor-pointer">
+            <Plus size={16} />
+            <span className="text-[10px]">Фото</span>
+          </button>
+        )}
+      </div>
+      {photos.length > 0 && (
+        <div className="text-[11px] text-gray-400 mt-1.5">Первое фото — главное. Перетаскивайте стрелками для сортировки.</div>
+      )}
+    </div>
+  );
+}
+
+function VariantDetailPanel({ variant, sets, positionName: parentPositionName, onUpdate, onClose }: {
   variant: PositionVariant;
   sets: PropertySet[];
+  positionName: string;
   onUpdate: (v: PositionVariant) => void;
   onClose: () => void;
 }) {
@@ -694,7 +786,7 @@ function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
             <div className="text-[15px] font-semibold text-gray-900 truncate">{label}</div>
             <div className="text-[11px] text-gray-400">Вариант · {variant.sku ?? "без артикула"}</div>
           </div>
-          <Toggle checked={variant.enabled} onChange={(v) => onUpdate({ ...variant, enabled: v })} size="sm" />
+          <Switch checked={variant.enabled} onCheckedChange={(v) => onUpdate({ ...variant, enabled: v })} />
         </div>
         {/* Tabs */}
         <div className="flex border-b border-gray-100 shrink-0 px-5">
@@ -709,18 +801,27 @@ function VariantDetailPanel({ variant, sets, onUpdate, onClose }: {
         <div className="flex-1 overflow-y-auto p-5">
           {tab === "basic" && (
             <div className="space-y-4">
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">Название</label>
+                <input defaultValue={variant.variantName ?? parentPositionName} placeholder={parentPositionName}
+                  onBlur={(e) => onUpdate({ ...variant, variantName: e.target.value || undefined })}
+                  className="w-full px-3 py-2.5 text-[13px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                <div className="text-[11px] text-gray-400 mt-1">Отображаемое название варианта для клиента</div>
+              </div>
+              {/* Photos */}
+              <VariantPhotosEditor
+                photos={[...(variant.photo ? [variant.photo] : []), ...(variant.photos ?? [])]}
+                onChange={(urls) => {
+                  const [first, ...rest] = urls;
+                  onUpdate({ ...variant, photo: first || undefined, photos: rest.length > 0 ? rest : undefined });
+                }}
+              />
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                 <div>
                   <div className="text-[13px] font-medium text-gray-800">Вариант по умолчанию</div>
                   <div className="text-[11px] text-gray-500">Отображается первым для клиента</div>
                 </div>
-                <Toggle checked={!!variant.isDefault} onChange={(v) => onUpdate({ ...variant, isDefault: v })} size="sm" />
-              </div>
-              <div>
-                <label className="block text-[12px] font-medium text-gray-700 mb-1">Цена, ₽</label>
-                <input type="number" defaultValue={variant.price}
-                  onBlur={(e) => onUpdate({ ...variant, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2.5 text-[13px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                <Switch checked={!!variant.isDefault} onCheckedChange={(v) => onUpdate({ ...variant, isDefault: v })} />
               </div>
               <div>
                 <label className="block text-[12px] font-medium text-gray-700 mb-1">Артикул (SKU)</label>
@@ -950,6 +1051,15 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
     toast("Порядок вариантов обновлён", "success");
   };
 
+  // Detect duplicate property combinations
+  const propKeys = (v: PositionVariant) => sets.map((s) => v.properties[s.id] ?? "").join("|");
+  const propKeyCounts = new Map<string, number>();
+  variants.forEach((v) => {
+    const key = propKeys(v);
+    propKeyCounts.set(key, (propKeyCounts.get(key) ?? 0) + 1);
+  });
+  const isDuplicate = (v: PositionVariant) => (propKeyCounts.get(propKeys(v)) ?? 0) > 1;
+
   const priceMin = Math.min(...variants.filter((v) => v.enabled).map((v) => v.price));
   const priceMax = Math.max(...variants.filter((v) => v.enabled).map((v) => v.price));
   const enabledCount = variants.filter((v) => v.enabled).length;
@@ -963,12 +1073,6 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
         <span className="text-[13px] font-semibold text-gray-800">{variants.length} вариантов</span>
         <span className="text-[12px] text-gray-400">·</span>
         <span className="text-[12px] text-gray-500">{enabledCount} активных</span>
-        {priceMin !== Infinity && (
-          <>
-            <span className="text-[12px] text-gray-400">·</span>
-            <span className="text-[12px] text-gray-500">от {priceMin} до {priceMax} ₽</span>
-          </>
-        )}
         <div className="flex-1" />
         {someSelected && (
           <button onClick={() => onChange(variants.filter((v) => !selectedIds.has(v.id)))}
@@ -976,10 +1080,6 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
             <Trash2 size={12} /> Удалить ({selectedIds.size})
           </button>
         )}
-        <button onClick={() => setShowBulkPricing(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-orange-600 border border-orange-200 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
-          <Zap size={12} /> Установить цены
-        </button>
         <div className="flex items-center gap-1 text-[11px] text-gray-400">
           <ArrowUpDown size={11} /> Перетащите строки для сортировки
         </div>
@@ -998,8 +1098,8 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
                   className="w-3.5 h-3.5 accent-orange-500" />
               </th>
               <th className="w-10 px-2 py-2.5">Фото</th>
+              <th className="px-3 py-2.5 text-left min-w-[120px]">Название</th>
               {sets.map((s) => <th key={s.id} className="px-3 py-2.5 text-left">{s.name}</th>)}
-              <th className="px-3 py-2.5 text-left w-28">Цена, ₽</th>
               <th className="px-3 py-2.5 text-left w-24">Артикул</th>
               <th className="px-3 py-2.5 text-left w-36">Вес</th>
               <th className="px-3 py-2.5 text-center w-12" title="По умолчанию">По ум.</th>
@@ -1053,41 +1153,43 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
                     />
                   </td>
 
-                  {/* Property value cells */}
+                  {/* Name */}
+                  <td className="px-3 py-2 max-w-[180px]">
+                    {(variant.variantName || variant.positionName) ? (
+                      <span className="text-[13px] text-gray-700 leading-snug break-words flex items-start gap-1">
+                        {variant.positionName && <Link2 size={11} className="text-gray-400 shrink-0 mt-0.5" />}
+                        <span>{variant.variantName || variant.positionName}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-gray-300">—</span>
+                    )}
+                  </td>
+
+                  {/* Property value cells (dropdowns) */}
                   {sets.map((s) => {
-                    const val = s.values.find((v) => v.id === variant.properties[s.id]);
+                    const currentValId = variant.properties[s.id];
+                    const hasDup = isDuplicate(variant);
                     return (
                       <td key={s.id} className="px-3 py-2">
-                        {val ? (
-                          <span className="flex items-center gap-1.5">
-                            {s.displayType === "swatch" && val.color && (
-                              <span className="w-3 h-3 rounded-sm shrink-0 border border-gray-200" style={{ backgroundColor: val.color }} />
-                            )}
-                            <span className="text-[13px] text-gray-700">{val.name}</span>
-                          </span>
-                        ) : <span className="text-[12px] text-red-400">—</span>}
+                        <select
+                          value={currentValId ?? ""}
+                          onChange={(e) => {
+                            const newProps = { ...variant.properties, [s.id]: e.target.value || undefined } as Record<string, string>;
+                            if (!e.target.value) delete newProps[s.id];
+                            updateVariant(variant.id, { properties: newProps });
+                          }}
+                          className={`w-full text-[13px] px-2 py-1 rounded-lg border focus:outline-none focus:ring-2 focus:ring-orange-300 cursor-pointer ${
+                            hasDup ? "border-amber-400 bg-amber-50 text-amber-800" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <option value="">—</option>
+                          {s.values.map((v) => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
                       </td>
                     );
                   })}
-
-                  {/* Price */}
-                  <td className="px-3 py-2">
-                    {isEditing("price") ? (
-                      <input autoFocus type="number" defaultValue={variant.price}
-                        onBlur={(e) => { updateVariant(variant.id, { price: parseFloat(e.target.value) || 0 }); setEditingCell(null); }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          if (e.key === "Tab") { e.preventDefault(); updateVariant(variant.id, { price: parseFloat((e.target as HTMLInputElement).value) || 0 }); const next = variants[idx + 1]; if (next) setEditingCell({ id: next.id, field: "price" }); else setEditingCell(null); }
-                        }}
-                        className="w-20 px-2 py-1 text-[13px] border-2 border-orange-400 rounded-lg focus:outline-none" />
-                    ) : (
-                      <button onClick={() => setEditingCell({ id: variant.id, field: "price" })}
-                        className={`px-2 py-1 text-[13px] rounded-lg hover:bg-orange-50 transition-colors group ${variant.price === 0 ? "text-red-400" : "text-gray-800 font-medium"}`}>
-                        {variant.price === 0 ? "Укажите" : `${variant.price} ₽`}
-                        <span className="ml-1 text-gray-300 opacity-0 group-hover:opacity-100 text-[10px]">✏</span>
-                      </button>
-                    )}
-                  </td>
 
                   {/* SKU */}
                   <td className="px-3 py-2">
@@ -1140,7 +1242,7 @@ function VariantsTable({ variants, sets, onChange, onDetachVariant, onEditVarian
 
                   {/* Enabled */}
                   <td className="px-3 py-2 text-center">
-                    <Toggle checked={variant.enabled} onChange={(v) => updateVariant(variant.id, { enabled: v })} size="xs" />
+                    <Switch checked={variant.enabled} onCheckedChange={(v) => updateVariant(variant.id, { enabled: v })} size="sm" />
                   </td>
 
                   {/* Row menu */}
@@ -1223,6 +1325,7 @@ export function VariantsTab({
     // Create a variant with this value
     const newVariant: PositionVariant = {
       id: `v-attach-${Date.now()}`,
+      positionName: pos.name,
       properties: { [firstSet.id]: newValue.id },
       price: pos.price,
       sku: pos.sku,
@@ -1370,16 +1473,15 @@ export function VariantsTab({
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[15px] font-semibold text-gray-800">Варианты</h3>
-            <span className="text-[11px] text-gray-400">Клик по ячейке — редактировать · Потяните строку — изменить порядок</span>
           </div>
           <VariantsTable variants={variants} sets={linkedSets} onChange={handleVariantsChange} onDetachVariant={onDetachVariant} onEditVariant={setEditingVariant} />
           <div className="mt-3 flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[12px] text-gray-500">
             <DollarSign size={13} className="text-gray-400 shrink-0" />
             Цены по городам, точкам и каналам настраиваются на вкладке{" "}
             {onGoToPrices ? (
-              <button onClick={onGoToPrices} className="hover:text-gray-700 transition-colors">«Цены»</button>
+              <button onClick={onGoToPrices} className="text-[12px] font-medium text-gray-700 hover:text-gray-900 underline underline-offset-2 transition-colors">«Цены»</button>
             ) : (
-              <span>«Цены»</span>
+              <span className="font-medium text-gray-700">«Цены»</span>
             )}
           </div>
         </div>
@@ -1406,6 +1508,7 @@ export function VariantsTab({
         <VariantDetailPanel
           variant={editingVariant}
           sets={linkedSets}
+          positionName={positionName}
           onUpdate={(updated) => {
             handleVariantsChange(variants.map((v) => v.id === updated.id ? updated : v));
             setEditingVariant(updated);

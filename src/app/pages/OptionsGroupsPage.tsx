@@ -4,7 +4,7 @@ import {
   Trash2, MoreVertical, Info, Save, X, HelpCircle,
 } from "lucide-react";
 import { optionGroups as initialGroups, OptionGroup, OptionBlock, CHANNELS, ChannelAvailability } from "../data/mockData";
-import { Toggle } from "../components/shared/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "../components/shared/Toast";
 
 function ChannelAvailabilitySelector({
@@ -61,7 +61,7 @@ function BlockCard({ block, groupChannels }: { block: OptionBlock; groupChannels
             {block.options.length} &nbsp; min: {block.min} &nbsp; max: {block.max} &nbsp; Вид: {displayLabels[block.displayType]}
           </span>
         </div>
-        <Toggle checked={true} onChange={() => {}} size="sm" />
+        <Switch checked={true} onCheckedChange={() => {}} size="sm" />
         <button className="p-1.5 hover:bg-gray-200 rounded-lg">
           <Trash2 size={14} className="text-gray-400" />
         </button>
@@ -129,7 +129,7 @@ function BlockCard({ block, groupChannels }: { block: OptionBlock; groupChannels
                       <td className="py-1.5 text-right text-gray-600">{opt.min}</td>
                       <td className="py-1.5 text-right text-gray-600">{opt.max || "∞"}</td>
                       <td className="py-1.5">
-                        <Toggle checked={opt.enabled} onChange={() => {}} size="sm" />
+                        <Switch checked={opt.enabled} onCheckedChange={() => {}} size="sm" />
                       </td>
                     </tr>
                   ))}
@@ -185,7 +185,7 @@ function GroupPanel({ group, onSave, onClose }: { group: OptionGroup; onSave: (u
             className="text-[17px] font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:outline-none px-1 -mx-1 rounded"
           />
         </div>
-        <Toggle checked={enabled} onChange={setEnabled} />
+        <Switch checked={enabled} onCheckedChange={setEnabled} />
         <button className="p-2 hover:bg-gray-100 rounded-lg">
           <MoreVertical size={16} className="text-gray-500" />
         </button>

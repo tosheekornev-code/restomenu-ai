@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus, Gift, Tag, ShoppingCart, Hash,
   ChevronDown, Pencil, Trash2, Info, BarChart2,
@@ -18,16 +19,6 @@ const TRIGGER_CONFIG: Record<GiftTrigger, { label: string; valueLabel: string; i
   promo_code: { label: "Промокод", valueLabel: "Код", icon: <Tag size={14} />, color: "bg-purple-100 text-purple-700" },
 };
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex w-9 h-5 rounded-full transition-colors cursor-pointer ${checked ? "bg-green-500" : "bg-gray-300"}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-    </button>
-  );
-}
 
 function ChannelChips({ channels }: { channels: (keyof ChannelAvailability)[] | "all" }) {
   if (channels === "all") return <span className="text-[11px] text-gray-400">Все каналы</span>;
@@ -110,7 +101,7 @@ function GiftCard({ gift, onToggle, onRemove }: {
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          <Toggle checked={gift.active} onChange={() => onToggle(gift.id)} />
+          <Switch checked={gift.active} onCheckedChange={() => onToggle(gift.id)} />
           <button className="p-1.5 hover:bg-gray-100 rounded-lg">
             <Pencil size={13} className="text-gray-400" />
           </button>

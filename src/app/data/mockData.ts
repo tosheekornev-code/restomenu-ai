@@ -155,12 +155,15 @@ export interface PropertySet {
 
 export interface PositionVariant {
   id: string;
+  variantName?: string;    // custom display name for this variant
+  positionName?: string;   // name of attached position (if variant was created from another product)
   properties: Record<string, string>; // { [propertySetId]: valueId }
   price: number;
   sku?: string;
   weight?: string;
   weightUnit?: "г" | "мл" | "кг" | "л" | "шт" | "порц";
   photo?: string;
+  photos?: string[];       // additional photos for gallery
   enabled: boolean;
   isDefault?: boolean;
   sortOrder?: number;
@@ -174,6 +177,13 @@ export interface PositionVariant {
   availability?: Availability;
 }
 
+// ─── PRICING SURCHARGES ───────────────────────────────────────────────────────
+export interface PricingSurcharge {
+  target: string;           // propertyValueId (e.g. "psv-s2") or channelKey (e.g. "delivery")
+  type: "rub" | "pct";
+  value: number;
+}
+
 // ─── PRICE OVERRIDES (geo-pricing) ────────────────────────────────────────────
 /**
  * Pricing hierarchy:
@@ -184,14 +194,28 @@ export interface PositionVariant {
  * For each level, only the explicitly set values override the parent.
  * Unset values inherit from the level above.
  */
+export interface MarkupRule {
+  type: "pct" | "rub";
+  value: number;
+}
+
 export interface PriceOverride {
   id: string;
   cityId: string;
   locationId?: string;   // if absent → city-level override
-  // For fixed/from price positions:
+
+  // --- Static mode (individual prices) ---
   price?: number;
-  // For variant positions (key = variantId):
   variantPrices?: Record<string, number>;
+  channelPrices?: Record<string, number>;
+  channelVariantPrices?: Record<string, Record<string, number>>;
+
+  // --- Dynamic mode (blanket markup applied to parent prices) ---
+  // When markup is set, static fields above are ignored;
+  // effective price = applyMarkup(parentPrice, markup)
+  markup?: MarkupRule;
+  // Per-channel markups (optional, override blanket markup for specific channels)
+  channelMarkups?: Record<string, MarkupRule>;
 }
 
 // ─── STOP LIST ────────────────────────────────────────────────────────────────
@@ -841,12 +865,11 @@ export const pizzaVariants: PositionVariant[] = [
   { id: "v-6", properties: { "ps-size": "psv-s3", "ps-dough": "psv-d2" }, price: 790, sku: "P35TR", enabled: false, isDefault: false },
 ];
 
-// Sample price overrides: Moscow is +10%, ТЦ «Мегамолл» additionally +5%
+// Sample price overrides: Moscow +10% (static), ТЦ «Мегамолл» additionally +5% (static)
 export const pizzaPriceOverrides: PriceOverride[] = [
   {
     id: "po-1",
     cityId: "moscow",
-    // city-level: +10% on all variants
     variantPrices: { "v-1": 495, "v-2": 540, "v-3": 650, "v-4": 695, "v-5": 825, "v-6": 870 },
   },
   {
@@ -854,7 +877,6 @@ export const pizzaPriceOverrides: PriceOverride[] = [
     cityId: "moscow",
     locationId: "loc-1", // ТЦ «Мегамолл» — prime location, +5% on top of Moscow
     variantPrices: { "v-1": 520, "v-2": 565, "v-3": 680, "v-4": 730 },
-    // v-5 and v-6 inherit from Moscow city price
   },
 ];
 

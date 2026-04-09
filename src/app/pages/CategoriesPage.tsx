@@ -5,9 +5,27 @@ import {
 } from "lucide-react";
 import { categories as initialCategories, cities, Category, CHANNELS } from "../data/mockData";
 import { CategoryEditPanel } from "../components/CategoryEditPanel";
-import { Toggle } from "../components/shared/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { toast } from "../components/shared/Toast";
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "../components/ui/table";
+import { Checkbox } from "../components/ui/checkbox";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "../components/ui/select";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from "../components/ui/dropdown-menu";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from "../components/ui/tooltip";
 import imgImage from "../../assets/a06546bfac7cc3617192c4e1fdddadb1edad4c60.png";
 import imgImage1 from "../../assets/95375c1163166df906e46345aed4ed3df9dfae65.png";
 import imgImage2 from "../../assets/1a4bd6c8a236dc61600f6d931401ac16343ca6d8.png";
@@ -49,10 +67,10 @@ function ScheduleBadge({ schedule }: { schedule: Category["availability"]["sched
     label = `${schedule.periods[0].from}–${schedule.periods[0].to}`;
   }
   return (
-    <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
+    <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 border-blue-100 rounded-full font-normal">
       <Clock size={9} />
       {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -74,17 +92,17 @@ function ChannelChips({ cat }: { cat: Category }) {
   const activeChannels = CHANNELS.filter((c) => activeSet.has(c.key));
 
   if (activeChannels.length === CHANNELS.length) {
-    return <span className="text-[11px] text-gray-400 italic">Все каналы</span>;
+    return <span className="text-[11px] text-muted-foreground italic">Все каналы</span>;
   }
   if (activeChannels.length === 0) {
-    return <span className="text-[11px] text-red-400 italic">Нет каналов</span>;
+    return <span className="text-[11px] text-destructive italic">Нет каналов</span>;
   }
   return (
     <div className="flex flex-wrap gap-1">
       {activeChannels.map((c) => (
-        <span key={c.key} title={c.label} className={`text-[9px] px-1.5 py-0.5 rounded-full ${c.color}`}>
+        <Badge key={c.key} variant="outline" className={`text-[9px] px-1.5 py-0.5 rounded-full font-normal ${c.color}`}>
           {c.shortLabel}
-        </span>
+        </Badge>
       ))}
     </div>
   );
@@ -118,44 +136,43 @@ function CategoryRow({
   const rowOpacity = cat.enabled ? "" : "opacity-50";
 
   return (
-    <tr className={`border-b border-gray-100 hover:bg-gray-50/60 group transition-colors ${rowOpacity}`}>
+    <TableRow className={`group ${rowOpacity}`}>
       {/* Checkbox + drag */}
-      <td className="py-3 pl-2 w-8">
+      <TableCell className="w-8 pl-2">
         <div className="flex items-center gap-1">
-          <GripVertical size={14} className="text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
-          <input
-            type="checkbox"
+          <GripVertical size={14} className="text-muted-foreground/30 opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
+          <Checkbox
             checked={selected}
-            onChange={(e) => onSelect(e.target.checked)}
-            className="w-4 h-4 rounded accent-orange-500"
+            onCheckedChange={(v) => onSelect(v === true)}
+            className="accent-orange-500"
           />
         </div>
-      </td>
+      </TableCell>
 
       {/* Photo */}
-      <td className={`py-3 ${isChild ? "pl-8" : ""}`}>
+      <TableCell className={isChild ? "pl-8" : ""}>
         {cat.photo ? (
           <img
             src={photoMap[cat.photo] ?? cat.photo}
-            className={`rounded-lg object-cover ${isChild ? "w-9 h-9 border border-gray-200" : "w-10 h-10"}`}
+            className={`rounded-lg object-cover ${isChild ? "w-9 h-9 border border-border" : "w-10 h-10"}`}
           />
         ) : (
-          <div className={`rounded-lg ${isChild ? "w-9 h-9 bg-gray-100 border border-gray-200" : "w-10 h-10 bg-gray-200"}`} />
+          <div className={`rounded-lg ${isChild ? "w-9 h-9 bg-muted border border-border" : "w-10 h-10 bg-muted"}`} />
         )}
-      </td>
+      </TableCell>
 
       {/* Name */}
-      <td className="py-3">
+      <TableCell>
         <div className="flex items-center gap-2">
-          {isChild && <span className="text-gray-300 text-[11px] shrink-0">└</span>}
+          {isChild && <span className="text-muted-foreground/40 text-[11px] shrink-0">└</span>}
           <div>
-            <div className={`flex items-center gap-2 ${isChild ? "text-[13px] text-gray-700" : "text-[13px] font-semibold text-gray-900"}`}>
+            <div className={`flex items-center gap-2 ${isChild ? "text-[13px] text-muted-foreground" : "text-[13px] font-semibold text-foreground"}`}>
               <span>{cat.name}</span>
               {!cat.enabled && (
-                <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-normal">
                   <EyeOff size={9} />
                   Скрыта
-                </span>
+                </Badge>
               )}
               <ScheduleBadge schedule={cat.availability.schedule} />
             </div>
@@ -173,55 +190,57 @@ function CategoryRow({
             )}
           </div>
         </div>
-      </td>
+      </TableCell>
 
       {/* Positions */}
-      <td className="py-3 w-24">
-        <button className="text-[13px] text-blue-600 hover:underline">
+      <TableCell className="w-24">
+        <Button variant="link" className="text-[13px] h-auto p-0">
           {cat.positionsCount} поз.
-        </button>
-      </td>
+        </Button>
+      </TableCell>
 
       {/* Availability */}
-      <td className="py-3 w-36">
+      <TableCell className="w-36">
         {locLabel ? (
           <div>
-            <div className="text-[12px] text-gray-700">{locLabel}</div>
+            <div className="text-[12px] text-foreground">{locLabel}</div>
             {locCount !== undefined && !cat.availability.everywhere && (
-              <div className="text-[11px] text-gray-400">{locCount} точек</div>
+              <div className="text-[11px] text-muted-foreground">{locCount} точек</div>
             )}
           </div>
         ) : (
-          <span className="text-[12px] text-red-400">—</span>
+          <span className="text-[12px] text-destructive">—</span>
         )}
-      </td>
+      </TableCell>
 
       {/* Channels */}
-      <td className="py-3 w-52">
+      <TableCell className="w-52">
         <ChannelChips cat={cat} />
-      </td>
+      </TableCell>
 
       {/* Actions */}
-      <td className="py-3 pr-2 w-28">
+      <TableCell className="w-28 pr-2">
         <div className="flex items-center gap-1.5 justify-end">
-          <Toggle checked={cat.enabled} onChange={onToggleEnabled} size="sm" />
-          <button
-            onClick={onEdit}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Редактировать"
-          >
-            <Pencil size={14} className="text-gray-400 hover:text-gray-600" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
-            title="Удалить"
-          >
-            <Trash2 size={14} className="text-gray-400 hover:text-red-500" />
-          </button>
+          <Switch checked={cat.enabled} onCheckedChange={onToggleEnabled} size="sm" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8" onClick={onEdit}>
+                <Pencil size={14} className="text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Редактировать</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 hover:bg-destructive/10" onClick={onDelete}>
+                <Trash2 size={14} className="text-muted-foreground hover:text-destructive" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Удалить</TooltipContent>
+          </Tooltip>
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -236,7 +255,6 @@ export function CategoriesPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(["cat-1"]));
   const [showInfo, setShowInfo] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
-  const [showBulkMenu, setShowBulkMenu] = useState(false);
 
   const parentCats = useMemo(() =>
     cats.filter((c) => !c.parentId && (
@@ -287,14 +305,12 @@ export function CategoriesPage() {
     setCats((prev) => prev.map((c) => selectedIds.has(c.id) ? { ...c, enabled: v } : c));
     toast(`${selectedIds.size} категорий ${v ? "включено" : "выключено"}`, "success");
     setSelectedIds(new Set());
-    setShowBulkMenu(false);
   };
 
   const handleBulkDelete = () => {
     setCats((prev) => prev.filter((c) => !selectedIds.has(c.id) && !selectedIds.has(c.parentId ?? "")));
     toast(`${selectedIds.size} категорий удалено`, "warning");
     setSelectedIds(new Set());
-    setShowBulkMenu(false);
   };
 
   const enabledCount = cats.filter((c) => c.enabled).length;
@@ -302,134 +318,124 @@ export function CategoriesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 bg-white">
-        <button className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 hover:bg-gray-50">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-background">
+        <Button variant="outline" className="gap-2 text-[13px] font-medium">
           <div className="w-5 h-5 bg-red-600 rounded-sm flex items-center justify-center">
             <span className="text-white text-[8px] font-bold">R</span>
           </div>
           Рыба и Мясо
-          <ChevronDown size={14} className="text-gray-400" />
-        </button>
+          <ChevronDown size={14} className="text-muted-foreground" />
+        </Button>
 
         {/* City filter */}
-        <select
-          value={filterCity}
-          onChange={(e) => setFilterCity(e.target.value)}
-          className="px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 bg-white focus:outline-none hover:bg-gray-50"
-        >
-          <option value="all">Все города</option>
-          {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={filterCity} onValueChange={setFilterCity}>
+          <SelectTrigger className="w-[160px] text-[13px]">
+            <SelectValue placeholder="Все города" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все города</SelectItem>
+            {cities.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
 
         {/* Bulk actions */}
         {someSelected && (
-          <div className="relative">
-            <button
-              onClick={() => setShowBulkMenu(!showBulkMenu)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-[13px] text-orange-700 font-medium hover:bg-orange-100"
-            >
-              {selectedIds.size} выбрано
-              <ChevronDown size={14} />
-            </button>
-            {showBulkMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowBulkMenu(false)} />
-                <div className="absolute left-0 top-10 bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-[180px] py-1">
-                  <button onClick={() => handleBulkEnable(true)}
-                    className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50">
-                    ✓ Включить все
-                  </button>
-                  <button onClick={() => handleBulkEnable(false)}
-                    className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50">
-                    ✗ Выключить все
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button onClick={handleBulkDelete}
-                    className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50">
-                    Удалить выбранные
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2 text-[13px] font-medium bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100 hover:text-orange-700">
+                {selectedIds.size} выбрано
+                <ChevronDown size={14} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[180px]">
+              <DropdownMenuItem onClick={() => handleBulkEnable(true)}>
+                Включить все
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBulkEnable(false)}>
+                Выключить все
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={handleBulkDelete}>
+                Удалить выбранные
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         <div className="flex-1" />
 
         {/* Stats */}
-        <span className="text-[12px] text-gray-400">
+        <span className="text-[12px] text-muted-foreground">
           {enabledCount} из {cats.length} активных
         </span>
 
         {/* Search */}
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по категориям"
-            className="pl-8 pr-4 py-2 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 w-52"
+            className="pl-8 pr-4 text-[13px] w-52"
           />
         </div>
 
-        <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-[13px] text-gray-700 hover:bg-gray-50">
+        <Button variant="outline" className="gap-2 text-[13px]">
           <Filter size={14} />
           Фильтр
-        </button>
-        <button className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
-          <Settings size={16} className="text-gray-500" />
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="icon">
+          <Settings size={16} />
+        </Button>
+        <Button
           onClick={() => { setIsNewCat(true); setEditingCat(null); }}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[13px] font-medium transition-colors"
+          className="gap-2 text-[13px] font-medium bg-green-600 hover:bg-green-700 text-white"
         >
           <Plus size={16} />
           Создать
-        </button>
+        </Button>
       </div>
 
       {/* Info callout */}
       {showInfo && (
-        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-start gap-3">
-          <Info size={15} className="text-blue-600 mt-0.5 shrink-0" />
-          <div className="text-[12px] text-blue-900 flex-1">
-            <span className="font-semibold">Доступность категорий:</span>{" "}
-            Настройте города, точки и каналы заказа для каждой категории.
-            Позиции наследуют эти настройки, но можно переопределить индивидуально.
-            Расписание ({" "}
-            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">
-              <Clock size={9} /> По дням
-            </span>{" "}) ограничивает время видимости категории в меню.
-          </div>
-          <button onClick={() => setShowInfo(false)} className="text-blue-400 hover:text-blue-600 text-[11px] shrink-0">
-            Закрыть
-          </button>
+        <div className="mx-5 mt-4">
+          <Alert className="bg-blue-50 border-blue-200">
+            <Info size={15} className="text-blue-600" />
+            <AlertTitle className="text-[12px] text-blue-900 font-semibold">Доступность категорий</AlertTitle>
+            <AlertDescription className="text-[12px] text-blue-900 [&_p]:inline">
+              <span>Настройте города, точки и каналы заказа для каждой категории. Позиции наследуют эти настройки, но можно переопределить индивидуально. Расписание (</span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-600 border-blue-200 rounded-full font-normal inline-flex align-middle mx-0.5">
+                <Clock size={9} /> По дням
+              </Badge>
+              <span>) ограничивает время видимости категории в меню.</span>
+              <Button variant="link" onClick={() => setShowInfo(false)} className="text-blue-400 hover:text-blue-600 text-[11px] h-auto p-0 ml-2">
+                Закрыть
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto px-5 py-4">
-        <table className="w-full">
-          <thead>
-            <tr className="text-[11px] text-gray-500 uppercase tracking-wide border-b border-gray-200">
-              <th className="w-8 pb-3 text-left pl-2">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
-                  onChange={(e) => toggleSelectAll(e.target.checked)}
-                  className="w-4 h-4 rounded accent-orange-500"
+        <Table>
+          <TableHeader>
+            <TableRow className="text-[11px] text-muted-foreground uppercase tracking-wide">
+              <TableHead className="w-8 pl-2">
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                  onCheckedChange={(v) => toggleSelectAll(v === true)}
                 />
-              </th>
-              <th className="w-12 pb-3 text-left">Фото</th>
-              <th className="pb-3 text-left">Название</th>
-              <th className="pb-3 text-left w-24">Позиции</th>
-              <th className="pb-3 text-left w-36">Точки</th>
-              <th className="pb-3 text-left w-52">Каналы заказа</th>
-              <th className="pb-3 text-right w-28 pr-2">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+              <TableHead className="w-12">Фото</TableHead>
+              <TableHead>Название</TableHead>
+              <TableHead className="w-24">Позиции</TableHead>
+              <TableHead className="w-36">Точки</TableHead>
+              <TableHead className="w-52">Каналы заказа</TableHead>
+              <TableHead className="w-28 text-right pr-2">Действия</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {parentCats.flatMap((cat) => {
               const children = childrenOf(cat.id);
               const isExpanded = expandedIds.has(cat.id);
@@ -471,13 +477,13 @@ export function CategoriesPage() {
                   : []),
               ];
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
         {parentCats.length === 0 && (
-          <div className="flex flex-col items-center py-20 text-gray-400">
-            <Search size={32} className="text-gray-200 mb-3" />
-            <div className="text-[14px] font-medium text-gray-500">Категории не найдены</div>
+          <div className="flex flex-col items-center py-20 text-muted-foreground">
+            <Search size={32} className="text-muted-foreground/30 mb-3" />
+            <div className="text-[14px] font-medium">Категории не найдены</div>
             <div className="text-[12px] mt-1">Попробуйте изменить поисковый запрос</div>
           </div>
         )}
