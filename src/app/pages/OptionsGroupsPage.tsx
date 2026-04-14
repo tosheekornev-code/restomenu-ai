@@ -1,16 +1,26 @@
 import { useMemo, useState, useEffect } from "react";
 import {
   Plus, Search, ChevronDown, ChevronUp, GripVertical,
-  Trash2, X, Image as ImageIcon,
+  Trash2, X, Image as ImageIcon, EyeOff, AlertTriangle,
   Puzzle, Layers, List, Grid2x2, LayoutGrid,
   MoreHorizontal, Copy, Save, ChevronRight, MapPin,
 } from "lucide-react";
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   optionGroups as initialGroups,
   allOptionsRegistry as initialOptions,
   OptionGroup,
   OptionBlock,
+  OptionBlockSettings,
   Option,
+  Availability,
   CHANNELS,
   cities,
 } from "../data/mockData";
@@ -153,6 +163,175 @@ function GroupMenu({ onDuplicate, onDelete }: { onDuplicate: () => void; onDelet
   );
 }
 
+// ─── Availability helpers ────────────────────────────────────────────
+function getAvailSummary(av?: Availability): { label: string; restricted: boolean } {
+  if (!av || av.everywhere) return { label: "Везде", restricted: false };
+  const enabledCityCount = av.cities.filter((c) => c.locations.some((l) => l.enabled)).length;
+  const total = cities.length;
+  if (enabledCityCount === 0) return { label: "Нигде", restricted: true };
+  if (enabledCityCount === total) return { label: "Везде", restricted: false };
+  return { label: `${enabledCityCount} из ${total}`, restricted: true };
+}
+
+function getActiveChKeys(opt: Option): string[] | null {
+  if (opt.availability && !opt.availability.everywhere) {
+    const enabled = new Set<string>();
+    for (const ca of opt.availability.cities) {
+      for (const la of ca.locations) {
+        if (!la.enabled) continue;
+        for (const ch of CHANNELS) { if (la.channels[ch.key]) enabled.add(ch.key); }
+      }
+    }
+    if (enabled.size < CHANNELS.length) return Array.from(enabled);
+  }
+  if (opt.channels) {
+    const active = CHANNELS.filter((c) => opt.channels![c.key]).map((c) => c.key);
+    if (active.length < CHANNELS.length) return active;
+  }
+  return null;
+}
+
+// ─── Block conflicts validation ──────────────────────────────────────
+interface BlockConflicts {
+  blockMinMax: string | null;
+  sumMinExceedsMax: string | null;
+  sumMaxBelowMin: string | null;
+  options: Record<string, { min?: string; max?: string }>;
+}
+
+function getBlockConflicts(block: OptionBlock): BlockConflicts {
+  const result: BlockConflicts = { blockMinMax: null, sumMinExceedsMax: null, sumMaxBelowMin: null, options: {} };
+  const bMax = block.max;
+  const bMin = block.min;
+
+  // 6. Block min > block max (when max > 0)
+  if (bMax > 0 && bMin > bMax) {
+    result.blockMinMax = `Мин. блока (${bMin}) больше макс. (${bMax})`;
+  }
+
+  let sumOfMins = 0;
+  let sumOfMaxes = 0;
+  let allMaxesBounded = true;
+
+  for (const optId of block.optionIds) {
+    const s = block.optionSettings?.[optId];
+    const oMin = s?.min ?? 0;
+    const oMax = s?.max ?? null;
+    const optConflict: { min?: string; max?: string } = {};
+
+    // 5. Option min > option max
+    if (oMax !== null && oMin > oMax) {
+      optConflict.min = `Мин. (${oMin}) больше макс. (${oMax})`;
+      optConflict.max = `Макс. (${oMax}) меньше мин. (${oMin})`;
+    }
+
+    // 1. Option min > block max
+    if (bMax > 0 && oMin > bMax) {
+      optConflict.min = `Мин. опции (${oMin}) больше макс. блока (${bMax})`;
+    }
+
+    // 2. Option max > block max
+    if (bMax > 0 && oMax !== null && oMax > bMax) {
+      optConflict.max = `Макс. опции (${oMax}) больше макс. блока (${bMax})`;
+    }
+
+    if (Object.keys(optConflict).length > 0) result.options[optId] = optConflict;
+
+    sumOfMins += oMin;
+    if (oMax !== null) { sumOfMaxes += oMax; } else { allMaxesBounded = false; }
+  }
+
+  // 3. Sum of option mins > block max
+  if (bMax > 0 && sumOfMins > bMax) {
+    result.sumMinExceedsMax = `Сумма мин. опций (${sumOfMins}) превышает макс. блока (${bMax})`;
+  }
+
+  // 4. Sum of option maxes < block min
+  if (bMin > 0 && allMaxesBounded && sumOfMaxes < bMin) {
+    result.sumMaxBelowMin = `Сумма макс. опций (${sumOfMaxes}) меньше мин. блока (${bMin})`;
+  }
+
+  return result;
+}
+
+// ─── Sortable option row ─────────────────────────────────────────────
+function SortableOptionRow({
+  opt,
+  parts,
+  settings,
+  conflict,
+  onEditOption,
+  onRemove,
+  onSettingsChange,
+}: {
+  opt: Option;
+  parts: string[];
+  settings?: OptionBlockSettings;
+  conflict?: { min?: string; max?: string };
+  onEditOption: (optId: string) => void;
+  onRemove: (optId: string) => void;
+  onSettingsChange: (optId: string, s: OptionBlockSettings) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: opt.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : undefined };
+
+  const disabled = !opt.enabled;
+  const avail = getAvailSummary(opt.availability);
+  const activeChannels = getActiveChKeys(opt);
+  const hasBadges = avail.restricted || activeChannels;
+  const optMin = settings?.min ?? 0;
+  const optMax = settings?.max ?? null;
+
+  return (
+    <div ref={setNodeRef} style={style}
+      className="flex items-center gap-3 pl-1 pr-2 py-2 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group"
+      onClick={() => onEditOption(opt.id)}>
+      <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}
+        className="p-1 text-gray-300 hover:text-gray-500 cursor-grab shrink-0 touch-none">
+        <GripVertical size={12} />
+      </button>
+      <div className={`w-8 h-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0 ${disabled ? "opacity-40" : ""}`}>
+        {opt.photo ? <img src={opt.photo} className="w-full h-full object-cover" /> : <ImageIcon size={13} className="text-gray-300" />}
+      </div>
+      <div className={`flex items-center gap-1.5 flex-1 min-w-0 ${disabled ? "opacity-40" : ""}`}>
+        {disabled && <EyeOff size={12} className="text-gray-400 shrink-0" />}
+        <span className="text-[13px] text-gray-800 truncate">{parts.join(", ")}</span>
+      </div>
+      {hasBadges && (
+        <div className={`flex items-center gap-1 shrink-0 ${disabled ? "opacity-40" : ""}`}>
+          {avail.restricted && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-medium">
+              <MapPin size={10} />{avail.label}
+            </span>
+          )}
+          {activeChannels && (
+            <span className="inline-flex items-center gap-0.5">
+              {activeChannels.map((key) => <ChannelIcon key={key} channel={key} size={13} />)}
+            </span>
+          )}
+        </div>
+      )}
+      {/* Min/Max per option */}
+      <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <input type="number" value={optMin} min={0}
+          onChange={(e) => onSettingsChange(opt.id, { ...settings, min: parseInt(e.target.value) || 0 })}
+          className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded-md focus:outline-none focus:ring-1 bg-white ${conflict?.min ? "border-red-300 focus:ring-red-300" : "border-gray-200 focus:ring-orange-300"}`}
+          title={conflict?.min ?? "Мин. кол-во"} />
+        <span className="text-[9px] text-gray-300">–</span>
+        <input type="number" value={optMax ?? ""} min={0} placeholder="∞"
+          onChange={(e) => onSettingsChange(opt.id, { ...settings, max: e.target.value === "" ? null : (parseInt(e.target.value) || 0) })}
+          className={`w-8 px-1 py-0.5 text-[10px] text-center border rounded-md focus:outline-none focus:ring-1 bg-white ${conflict?.max ? "border-red-300 focus:ring-red-300" : "border-gray-200 focus:ring-orange-300"}`}
+          title={conflict?.max ?? "Макс. кол-во"} />
+      </div>
+      <button onClick={(e) => { e.stopPropagation(); onRemove(opt.id); }}
+        className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Убрать из блока">
+        <X size={13} />
+      </button>
+      <ChevronRight size={13} className="text-gray-300 shrink-0" />
+    </div>
+  );
+}
+
 // ─── BlockCard (uses optionIds + lookup) ──────────────────────────────
 function BlockCard({
   block,
@@ -176,6 +355,20 @@ function BlockCard({
 
   const blockOptions = block.optionIds.map((id) => optionsMap.get(id)).filter(Boolean) as Option[];
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleOptionDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = block.optionIds.indexOf(active.id as string);
+      const newIndex = block.optionIds.indexOf(over.id as string);
+      onChange({ optionIds: arrayMove(block.optionIds, oldIndex, newIndex) });
+    }
+  };
+
   const addOptionToBlock = (optId: string) => {
     if (!block.optionIds.includes(optId)) {
       onChange({ optionIds: [...block.optionIds, optId] });
@@ -188,19 +381,38 @@ function BlockCard({
     onChange({ optionIds: block.optionIds.filter((id) => id !== optId) });
   };
 
+  const updateOptionSettings = (optId: string, s: OptionBlockSettings) => {
+    onChange({ optionSettings: { ...block.optionSettings, [optId]: s } });
+  };
+
   const ruleText =
     block.min === 0 && block.max === 0 ? "Свободный выбор"
       : block.min === block.max ? `Выбрать ровно ${block.min}`
       : block.max === 0 ? `Выбрать от ${block.min}`
       : `Выбрать от ${block.min} до ${block.max}`;
 
+  const conflicts = getBlockConflicts(block);
+  const hasBlockWarning = conflicts.blockMinMax || conflicts.sumMinExceedsMax || conflicts.sumMaxBelowMin;
+  const blockWarningText = [conflicts.blockMinMax, conflicts.sumMinExceedsMax, conflicts.sumMaxBelowMin].filter(Boolean).join("\n");
+
+  // Sortable block wrapper
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 10 : undefined };
+
   return (
-    <div className="border border-gray-200 rounded-2xl bg-white mb-3">
+    <div ref={setNodeRef} style={style} className="border border-gray-200 rounded-2xl bg-white mb-3">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 rounded-t-2xl">
-        <GripVertical size={14} className="text-gray-300 cursor-grab shrink-0" />
+        <button {...attributes} {...listeners} className="text-gray-300 hover:text-gray-500 cursor-grab shrink-0 touch-none">
+          <GripVertical size={14} />
+        </button>
         <input value={block.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Название блока"
           className="flex-1 min-w-0 text-[14px] font-semibold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-orange-400 focus:outline-none px-1 -mx-1" />
-        <span className="text-[11px] text-gray-400 shrink-0 hidden sm:block">{blockOptions.length} оп. · {ruleText}</span>
+        <div className="hidden sm:flex items-center gap-1 text-[11px] text-gray-400 shrink-0">
+          {hasBlockWarning && (
+            <span className="text-red-500 cursor-help" title={blockWarningText}><AlertTriangle size={11} /></span>
+          )}
+          <span>{blockOptions.length} оп. · {ruleText}</span>
+        </div>
         <BlockMenu onDuplicate={onDuplicate} onDelete={onDelete} />
         <button onClick={() => setCollapsed(!collapsed)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg shrink-0">
           {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -225,10 +437,12 @@ function BlockCard({
             <div className="flex items-center gap-1.5">
               <span className="text-gray-400">Выбрать от</span>
               <input type="number" value={block.min} onChange={(e) => onChange({ min: parseInt(e.target.value) || 0 })}
-                className="w-11 px-1.5 py-1 text-[11px] text-center border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-300 bg-white" />
+                className={`w-11 px-1.5 py-1 text-[11px] text-center border rounded-md focus:outline-none focus:ring-1 bg-white ${conflicts.blockMinMax || conflicts.sumMaxBelowMin ? "border-red-300 focus:ring-red-300" : "border-gray-200 focus:ring-orange-300"}`}
+                title={conflicts.blockMinMax || conflicts.sumMaxBelowMin || undefined} />
               <span className="text-gray-400">до</span>
               <input type="number" value={block.max} onChange={(e) => onChange({ max: parseInt(e.target.value) || 0 })} placeholder="∞"
-                className="w-11 px-1.5 py-1 text-[11px] text-center border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-300 bg-white" />
+                className={`w-11 px-1.5 py-1 text-[11px] text-center border rounded-md focus:outline-none focus:ring-1 bg-white ${conflicts.blockMinMax || conflicts.sumMinExceedsMax ? "border-red-300 focus:ring-red-300" : "border-gray-200 focus:ring-orange-300"}`}
+                title={conflicts.blockMinMax || conflicts.sumMinExceedsMax || undefined} />
               <span className="text-gray-400">опций</span>
             </div>
           </div>
@@ -240,46 +454,25 @@ function BlockCard({
                 <div className="text-[12px] text-gray-400 mb-3">В блоке пока нет опций</div>
               </div>
             ) : (
-              <div className="space-y-0.5 mb-2">
-                {blockOptions.map((opt) => {
-                  const hasAvail = opt.availability && !opt.availability.everywhere;
-                  const activeChannelKeys = opt.channels
-                    ? CHANNELS.filter((c) => opt.channels![c.key]).map((c) => c.key)
-                    : null;
-                  const hasChannels = activeChannelKeys && activeChannelKeys.length < CHANNELS.length;
-                  const parts: string[] = [opt.techName || opt.name];
-                  if (opt.price > 0) parts.push(`${opt.price} ₽`);
-                  if (opt.weight) parts.push(`${opt.weight} ${opt.weightUnit ?? "гр"}`);
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleOptionDragEnd}>
+                <SortableContext items={block.optionIds} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-0.5 mb-2">
+                    {blockOptions.map((opt) => {
+                      const parts: string[] = [opt.techName || opt.name];
+                      if (opt.price > 0) parts.push(`${opt.price} ₽`);
+                      if (opt.weight) parts.push(`${opt.weight} ${opt.weightUnit ?? "гр"}`);
 
-                  return (
-                    <div key={opt.id} className="flex items-center gap-3 pl-2 pr-2 py-2 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group"
-                      onClick={() => onEditOption(opt.id)}>
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-                        {opt.photo ? <img src={opt.photo} className="w-full h-full object-cover" /> : <ImageIcon size={13} className="text-gray-300" />}
-                      </div>
-                      <div className="flex-1 min-w-0 text-[13px] text-gray-800 truncate">{parts.join(", ")}</div>
-                      {(hasAvail || hasChannels) && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          {hasAvail && <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[9px] font-medium"><MapPin size={9} /> Ограничено</span>}
-                          {hasChannels && activeChannelKeys && (
-                            <span className="inline-flex items-center gap-0.5">
-                              {activeChannelKeys.map((key) => <ChannelIcon key={key} channel={key} size={12} />)}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Switch checked={opt.enabled} onCheckedChange={() => {}} size="sm" />
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); removeFromBlock(opt.id); }}
-                        className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Убрать из блока">
-                        <X size={13} />
-                      </button>
-                      <ChevronRight size={13} className="text-gray-300 shrink-0" />
-                    </div>
-                  );
-                })}
-              </div>
+                      return (
+                        <SortableOptionRow key={opt.id} opt={opt} parts={parts}
+                          settings={block.optionSettings?.[opt.id]}
+                          conflict={conflicts.options[opt.id]}
+                          onEditOption={onEditOption} onRemove={removeFromBlock}
+                          onSettingsChange={updateOptionSettings} />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
 
             <div className="relative">
@@ -381,6 +574,21 @@ function GroupPanel({
     return `${merged.name}${blockName ? ` · ${blockName}` : ""}`;
   };
 
+  const blockSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleBlockDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const ids = merged.blocks.map((b) => b.id);
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      update({ blocks: arrayMove(merged.blocks, oldIndex, newIndex) });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-50/30">
       <div className="flex-1 overflow-y-auto">
@@ -407,19 +615,21 @@ function GroupPanel({
               </button>
             </div>
           ) : (
-            <>
-              {merged.blocks.map((block) => (
-                <BlockCard key={block.id} block={block} optionsMap={optionsMap} allOptionsList={allOptionsList}
-                  onChange={(patch) => updateBlock(block.id, patch)}
-                  onDelete={() => setDeleteBlockId(block.id)}
-                  onDuplicate={() => duplicateBlock(block.id)}
-                  onEditOption={(optId) => setEditingOptionId(optId)} />
-              ))}
+            <DndContext sensors={blockSensors} collisionDetection={closestCenter} onDragEnd={handleBlockDragEnd}>
+              <SortableContext items={merged.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+                {merged.blocks.map((block) => (
+                  <BlockCard key={block.id} block={block} optionsMap={optionsMap} allOptionsList={allOptionsList}
+                    onChange={(patch) => updateBlock(block.id, patch)}
+                    onDelete={() => setDeleteBlockId(block.id)}
+                    onDuplicate={() => duplicateBlock(block.id)}
+                    onEditOption={(optId) => setEditingOptionId(optId)} />
+                ))}
+              </SortableContext>
               <button onClick={addBlock}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-xl text-[13px] font-medium hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/30 transition-colors mt-2">
                 <Plus size={14} /> Добавить блок
               </button>
-            </>
+            </DndContext>
           )}
         </div>
       </div>
@@ -617,11 +827,16 @@ export function OptionsGroupsPage() {
               {filteredGroups.map((g) => {
                 const optCount = g.blocks.reduce((s, b) => s + b.optionIds.length, 0);
                 const active = selectedGroup?.id === g.id;
+                const hasConflict = g.blocks.some((b) => {
+                  const c = getBlockConflicts(b);
+                  return c.blockMinMax || c.sumMinExceedsMax || c.sumMaxBelowMin || Object.keys(c.options).length > 0;
+                });
                 return (
                   <button key={g.id} onClick={() => setSelectedGroupId(g.id)}
                     className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${active ? "bg-orange-50 text-orange-700" : "hover:bg-gray-50 text-gray-700"}`}>
                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${g.enabled ? "bg-green-400" : "bg-gray-300"}`} />
                     <span className={`flex-1 min-w-0 text-[13px] truncate ${active ? "font-semibold" : "font-medium"}`}>{g.name}</span>
+                    {hasConflict && <AlertTriangle size={11} className="text-red-500 shrink-0" />}
                     <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">{optCount}</span>
                   </button>
                 );

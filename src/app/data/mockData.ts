@@ -100,6 +100,11 @@ export interface OptionGroup {
   enabled: boolean;
 }
 
+export interface OptionBlockSettings {
+  min?: number;
+  max?: number | null;
+}
+
 export interface OptionBlock {
   id: string;
   name: string;
@@ -107,6 +112,7 @@ export interface OptionBlock {
   min: number;
   max: number;
   optionIds: string[];
+  optionSettings?: Record<string, OptionBlockSettings>;
 }
 
 export interface Option {

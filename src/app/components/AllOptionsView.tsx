@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   Search, ChevronRight, Image as ImageIcon, Trash2, X, Upload, Link,
-  MapPin, DollarSign, Save, Plus, Globe, MoreHorizontal, Copy,
+  MapPin, DollarSign, Save, Plus, Globe, MoreHorizontal, Copy, Info, EyeOff,
 } from "lucide-react";
 import {
   OptionGroup, Option, Availability, PriceOverride, cities, CHANNELS,
@@ -184,13 +184,16 @@ export function AllOptionsView({ groups, onGroupsChange, options, onOptionsChang
                   className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 last:border-0 transition-colors cursor-pointer rounded-lg ${editingId === opt.id ? "bg-orange-50/60" : "hover:bg-white"}`}
                   onClick={() => setEditingId(editingId === opt.id ? null : opt.id)}>
                   {/* Photo */}
-                  <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                  <div className={`w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0 ${!opt.enabled ? "opacity-40" : ""}`}>
                     {opt.photo ? <img src={opt.photo} className="w-full h-full object-cover" /> : <ImageIcon size={14} className="text-gray-300" />}
                   </div>
 
                   {/* Name + groups */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-gray-800 truncate">{opt.techName || opt.name}</div>
+                  <div className={`flex-1 min-w-0 ${!opt.enabled ? "opacity-40" : ""}`}>
+                    <div className="flex items-center gap-1.5 text-[13px] text-gray-800 truncate">
+                      {!opt.enabled && <EyeOff size={12} className="text-gray-400 shrink-0" />}
+                      {opt.techName || opt.name}
+                    </div>
                     {groupNames.length > 0 ? (
                       <div className="flex items-center gap-1 flex-wrap">
                         {groupNames.map((name, i) => (
@@ -203,7 +206,7 @@ export function AllOptionsView({ groups, onGroupsChange, options, onOptionsChang
                   </div>
 
                   {/* Badges */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className={`flex items-center gap-1.5 shrink-0 ${!opt.enabled ? "opacity-40" : ""}`}>
                     {avail.restricted && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-medium">
                         <MapPin size={10} />{avail.label}
@@ -400,15 +403,21 @@ export function OptionDetailPanel({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-white">
-          {isDirty ? <span className="text-[11px] text-amber-600 font-medium">Есть несохранённые изменения</span>
-            : <span className="text-[11px] text-gray-400">Нет изменений</span>}
-          <div className="flex items-center gap-2">
-            <button onClick={handleClose} className="px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Отмена</button>
-            <button onClick={handleSave} disabled={!isDirty}
-              className={`inline-flex items-center gap-2 px-5 py-2 text-[13px] font-medium rounded-xl transition-colors ${isDirty ? "bg-green-600 text-white hover:bg-green-700" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
-              <Save size={14} /> Сохранить
-            </button>
+        <div className="shrink-0 border-t border-gray-100 bg-white">
+          <div className="flex items-center gap-2 px-5 py-2 bg-amber-50/80 border-b border-amber-100">
+            <Info size={13} className="text-amber-500 shrink-0" />
+            <p className="text-[11px] text-amber-600">Опция — общая для всех групп. Изменения отразятся везде, где она используется.</p>
+          </div>
+          <div className="px-5 py-3 flex items-center justify-between">
+            {isDirty ? <span className="text-[11px] text-amber-600 font-medium">Есть несохранённые изменения</span>
+              : <span className="text-[11px] text-gray-400">Нет изменений</span>}
+            <div className="flex items-center gap-2">
+              <button onClick={handleClose} className="px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Отмена</button>
+              <button onClick={handleSave} disabled={!isDirty}
+                className={`inline-flex items-center gap-2 px-5 py-2 text-[13px] font-medium rounded-xl transition-colors ${isDirty ? "bg-green-600 text-white hover:bg-green-700" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
+                <Save size={14} /> Сохранить
+              </button>
+            </div>
           </div>
         </div>
       </div>
