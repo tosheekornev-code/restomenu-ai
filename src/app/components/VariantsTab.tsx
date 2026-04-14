@@ -8,12 +8,14 @@ import {
 import {
   PropertySet, PropertyValue, PositionVariant, Position,
   propertySets as globalSets, positions as allPositions,
-  Availability, CHANNELS, ChannelAvailability, cities,
+  Availability, CHANNELS,
+  PriceOverride, MarkupRule,
 } from "../data/mockData";
 import { AvailabilitySection } from "./AvailabilitySection";
 import { Toggle } from "./shared/Toggle";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "./shared/Toast";
+import { PricesTab } from "./PricesTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface VariantsTabProps {
@@ -24,6 +26,14 @@ interface VariantsTabProps {
   onChange?: (sets: PropertySet[], variants: PositionVariant[]) => void;
   onDetachVariant?: (variant: PositionVariant, label: string) => void;
   onGoToPrices?: () => void;
+  // Price data for variant drawer "Цены" tab
+  priceOverrides?: PriceOverride[];
+  onPriceOverridesChange?: (overrides: PriceOverride[]) => void;
+  onVariantPriceChange?: (variantId: string, price: number) => void;
+  baseChannelPrices?: Record<string, number>;
+  onBaseChannelPriceChange?: (key: string, price: number | undefined) => void;
+  // Availability for variant drawer "Доступность" tab
+  positionAvailability?: Availability;
 }
 
 const WEIGHT_UNITS = ["г", "мл", "кг", "л", "шт", "порц"] as const;
@@ -762,21 +772,226 @@ function VariantPhotosEditor({ photos, onChange }: { photos: string[]; onChange:
   );
 }
 
-function VariantDetailPanel({ variant, sets, positionName: parentPositionName, onUpdate, onClose }: {
+// ─── Variant Prices Adapter (wraps PricesTab for a single variant) ───────────
+// Converts between variant-level fields and single-product fields that PricesTab expects.
+//
+// Mapping:
+//   Real PriceOverride          → Virtual PriceOverride (this variant only)
+//   ────────────────────────────────────────────────────────────────────────
+//   variantPrices[vid]          → price
+//   variantMarkups[vid]         → markup        ← personal markup, not blanket
+//   channelVariantPrices[c][vid]→ channelPrices[c]
+//   channelVariantMarkups[c][vid] → channelMarkups[c]
+//
+// The blanket markup/channelMarkups are NOT proxied — they affect all variants
+// and must not be edited from inside the variant drawer. Their effect is shown
+// indirectly because the variant inherits from them when no personal markup is set.
+function VariantPricesAdapter({ variant, sets, priceOverrides, onPriceOverridesChange, onVariantPriceChange,
+  baseChannelPrices, onBaseChannelPriceChange, availability,
+  showBaseChannels, onShowBaseChannelsChange,
+}: {
+  variant: PositionVariant;
+  sets: PropertySet[];
+  priceOverrides: PriceOverride[];
+  onPriceOverridesChange?: (overrides: PriceOverride[]) => void;
+  onVariantPriceChange?: (variantId: string, price: number) => void;
+  baseChannelPrices?: Record<string, number>;
+  onBaseChannelPriceChange?: (key: string, price: number | undefined) => void;
+  availability?: Availability;
+  showBaseChannels?: boolean;
+  onShowBaseChannelsChange?: (v: boolean) => void;
+}) {
+  const vid = variant.id;
+  const label = getVariantLabel(variant, sets);
+
+  // Extract this variant's channel prices from the composite key format (variantId:channelKey)
+  const variantChannelPrices: Record<string, number> = {};
+  if (baseChannelPrices) {
+    CHANNELS.forEach((ch) => {
+      const val = baseChannelPrices[`${vid}:${ch.key}`];
+      if (val !== undefined) variantChannelPrices[ch.key] = val;
+    });
+  }
+
+  // Convert real overrides → virtual (single-product format for PricesTab)
+  const virtualOverrides: PriceOverride[] = priceOverrides.map((ov) => {
+    const cp: Record<string, number> = {};
+    if (ov.channelVariantPrices) {
+      for (const [ch, vps] of Object.entries(ov.channelVariantPrices)) {
+        if (vps[vid] !== undefined) cp[ch] = vps[vid];
+      }
+    }
+    const cm: Record<string, MarkupRule> = {};
+    if (ov.channelVariantMarkups) {
+      for (const [ch, vms] of Object.entries(ov.channelVariantMarkups)) {
+        if (vms[vid]) cm[ch] = vms[vid];
+      }
+    }
+    return {
+      id: ov.id,
+      cityId: ov.cityId,
+      locationId: ov.locationId,
+      price: ov.variantPrices?.[vid],
+      channelPrices: Object.keys(cp).length > 0 ? cp : undefined,
+      // Personal markups become the virtual override's blanket markup
+      markup: ov.variantMarkups?.[vid],
+      channelMarkups: Object.keys(cm).length > 0 ? cm : undefined,
+    };
+  });
+
+  // Map virtual overrides back → real overrides
+  const handleOverridesChange = (virtualOvs: PriceOverride[]) => {
+    if (!onPriceOverridesChange) return;
+
+    const realKeys = new Set(priceOverrides.map((o) => `${o.cityId}|${o.locationId ?? ""}`));
+
+    // Update existing real overrides
+    const result: PriceOverride[] = priceOverrides.map((real) => {
+      const vOv = virtualOvs.find((v) => v.cityId === real.cityId && v.locationId === real.locationId);
+
+      if (!vOv) {
+        // Removed in the drawer → clear THIS variant's data only
+        const vp = { ...(real.variantPrices ?? {}) };
+        delete vp[vid];
+        const vm = { ...(real.variantMarkups ?? {}) };
+        delete vm[vid];
+        const cvp = { ...(real.channelVariantPrices ?? {}) };
+        for (const ch of Object.keys(cvp)) {
+          const inner = { ...(cvp[ch] ?? {}) };
+          delete inner[vid];
+          if (Object.keys(inner).length > 0) cvp[ch] = inner; else delete cvp[ch];
+        }
+        const cvm = { ...(real.channelVariantMarkups ?? {}) };
+        for (const ch of Object.keys(cvm)) {
+          const inner = { ...(cvm[ch] ?? {}) };
+          delete inner[vid];
+          if (Object.keys(inner).length > 0) cvm[ch] = inner; else delete cvm[ch];
+        }
+        return {
+          ...real,
+          variantPrices: Object.keys(vp).length > 0 ? vp : undefined,
+          variantMarkups: Object.keys(vm).length > 0 ? vm : undefined,
+          channelVariantPrices: Object.keys(cvp).length > 0 ? cvp : undefined,
+          channelVariantMarkups: Object.keys(cvm).length > 0 ? cvm : undefined,
+          // Keep blanket markup — it's city-level, other variants may need it
+        };
+      }
+
+      // Update variant prices
+      const vp = { ...(real.variantPrices ?? {}) };
+      if (vOv.price !== undefined) vp[vid] = vOv.price;
+      else delete vp[vid];
+
+      // Personal variant markup (virtual.markup → real.variantMarkups[vid])
+      const vm = { ...(real.variantMarkups ?? {}) };
+      if (vOv.markup) vm[vid] = vOv.markup;
+      else delete vm[vid];
+
+      // Update channel variant prices
+      const cvp = { ...(real.channelVariantPrices ?? {}) };
+      if (vOv.channelPrices) {
+        for (const [ch, p] of Object.entries(vOv.channelPrices)) {
+          cvp[ch] = { ...(cvp[ch] ?? {}), [vid]: p };
+        }
+      }
+      // Personal channel-variant markups (virtual.channelMarkups[ch] → real.channelVariantMarkups[ch][vid])
+      const cvm = { ...(real.channelVariantMarkups ?? {}) };
+      if (vOv.channelMarkups) {
+        for (const [ch, rule] of Object.entries(vOv.channelMarkups)) {
+          cvm[ch] = { ...(cvm[ch] ?? {}), [vid]: rule };
+        }
+      }
+
+      return {
+        ...real,
+        // Blanket markup/channelMarkups: NEVER overwrite from drawer
+        variantPrices: Object.keys(vp).length > 0 ? vp : undefined,
+        variantMarkups: Object.keys(vm).length > 0 ? vm : undefined,
+        channelVariantPrices: Object.keys(cvp).length > 0 ? cvp : undefined,
+        channelVariantMarkups: Object.keys(cvm).length > 0 ? cvm : undefined,
+      };
+    });
+
+    // Add new overrides (cities/locations added in the drawer)
+    for (const vOv of virtualOvs) {
+      if (!realKeys.has(`${vOv.cityId}|${vOv.locationId ?? ""}`)) {
+        const vp: Record<string, number> = {};
+        if (vOv.price !== undefined) vp[vid] = vOv.price;
+        const vm: Record<string, MarkupRule> = {};
+        if (vOv.markup) vm[vid] = vOv.markup;
+        const cvp: Record<string, Record<string, number>> = {};
+        if (vOv.channelPrices) {
+          for (const [ch, p] of Object.entries(vOv.channelPrices)) {
+            cvp[ch] = { [vid]: p };
+          }
+        }
+        const cvm: Record<string, Record<string, MarkupRule>> = {};
+        if (vOv.channelMarkups) {
+          for (const [ch, rule] of Object.entries(vOv.channelMarkups)) {
+            cvm[ch] = { [vid]: rule };
+          }
+        }
+        result.push({
+          id: vOv.id,
+          cityId: vOv.cityId,
+          locationId: vOv.locationId,
+          variantPrices: Object.keys(vp).length > 0 ? vp : undefined,
+          variantMarkups: Object.keys(vm).length > 0 ? vm : undefined,
+          channelVariantPrices: Object.keys(cvp).length > 0 ? cvp : undefined,
+          channelVariantMarkups: Object.keys(cvm).length > 0 ? cvm : undefined,
+        });
+      }
+    }
+
+    onPriceOverridesChange(result);
+  };
+
+  return (
+    <PricesTab
+      isVariants={false}
+      positionName={label}
+      basePrice={variant.price}
+      onBasePriceChange={(p) => onVariantPriceChange?.(variant.id, p)}
+      baseChannelPrices={variantChannelPrices}
+      onBaseChannelPriceChange={onBaseChannelPriceChange ? (ch, p) => {
+        onBaseChannelPriceChange(`${vid}:${ch}`, p);
+      } : undefined}
+      variants={[]}
+      variantSets={[]}
+      priceOverrides={virtualOverrides}
+      onChange={handleOverridesChange}
+      availability={availability}
+      showBaseChannels={showBaseChannels}
+      onShowBaseChannelsChange={onShowBaseChannelsChange}
+    />
+  );
+}
+
+function VariantDetailPanel({ variant, sets, positionName: parentPositionName, onUpdate, onClose,
+  priceOverrides, onPriceOverridesChange, onVariantPriceChange,
+  baseChannelPrices, onBaseChannelPriceChange,
+  positionAvailability,
+}: {
   variant: PositionVariant;
   sets: PropertySet[];
   positionName: string;
   onUpdate: (v: PositionVariant) => void;
   onClose: () => void;
+  priceOverrides?: PriceOverride[];
+  onPriceOverridesChange?: (overrides: PriceOverride[]) => void;
+  onVariantPriceChange?: (variantId: string, price: number) => void;
+  baseChannelPrices?: Record<string, number>;
+  onBaseChannelPriceChange?: (key: string, price: number | undefined) => void;
+  positionAvailability?: Availability;
 }) {
-  const [tab, setTab] = useState<"basic" | "availability" | "discount">("basic");
+  const [tab, setTab] = useState<"basic" | "availability" | "prices" | "discount">("basic");
+  const [showBaseChannels, setShowBaseChannels] = useState(false);
   const label = getVariantLabel(variant, sets);
-  const channels = variant.channels ?? {};
 
   return (
     <>
       <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-30 w-[560px] bg-white shadow-2xl flex flex-col">
+      <div className="fixed right-0 top-0 bottom-0 z-30 w-[700px] bg-white shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 shrink-0">
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600">
@@ -790,7 +1005,7 @@ function VariantDetailPanel({ variant, sets, positionName: parentPositionName, o
         </div>
         {/* Tabs */}
         <div className="flex border-b border-gray-100 shrink-0 px-5">
-          {([["basic", "Основное"], ["availability", "Доступность"], ["discount", "Скидки"]] as const).map(([key, title]) => (
+          {([["basic", "Основное"], ["availability", "Доступность"], ["prices", "Цены"], ["discount", "Скидки"]] as const).map(([key, title]) => (
             <button key={key} onClick={() => setTab(key)}
               className={`py-3 px-3 text-[13px] font-medium border-b-2 -mb-px transition-colors ${tab === key ? "border-orange-500 text-orange-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
               {title}
@@ -847,19 +1062,47 @@ function VariantDetailPanel({ variant, sets, positionName: parentPositionName, o
 
           {tab === "availability" && (
             <AvailabilitySection
-              availability={variant.availability ?? {
+              availability={variant.availability ?? positionAvailability ?? {
                 everywhere: true,
-                cities: cities.map((city) => ({
-                  cityId: city.id,
-                  locations: city.locations.map((loc) => ({
-                    locationId: loc.id,
-                    enabled: true,
-                    channels: Object.fromEntries(CHANNELS.map((c) => [c.key, true])) as ChannelAvailability,
-                  })),
-                })),
+                cities: [],
                 schedule: { type: "daily", allDay: true },
               }}
               onChange={(avail) => onUpdate({ ...variant, availability: avail })}
+              showInheritToggle
+              inherited={!variant.availability}
+              onInheritChange={(inh) => {
+                if (inh) {
+                  // Reset to inherited state
+                  onUpdate({ ...variant, availability: undefined });
+                } else {
+                  // Materialize current effective availability for editing
+                  onUpdate({
+                    ...variant,
+                    availability: positionAvailability ?? {
+                      everywhere: true,
+                      cities: [],
+                      schedule: { type: "daily", allDay: true },
+                    },
+                  });
+                }
+              }}
+              inheritedFromLabel={`позиции «${parentPositionName}»`}
+              inheritedAvailability={positionAvailability}
+            />
+          )}
+
+          {tab === "prices" && (
+            <VariantPricesAdapter
+              variant={variant}
+              sets={sets}
+              priceOverrides={priceOverrides ?? []}
+              onPriceOverridesChange={onPriceOverridesChange}
+              onVariantPriceChange={onVariantPriceChange}
+              baseChannelPrices={baseChannelPrices}
+              onBaseChannelPriceChange={onBaseChannelPriceChange}
+              availability={variant.availability ?? positionAvailability}
+              showBaseChannels={showBaseChannels}
+              onShowBaseChannelsChange={setShowBaseChannels}
             />
           )}
 
@@ -1280,6 +1523,9 @@ export function VariantsTab({
   positionName, positionId,
   initialSets = [], initialVariants = [],
   onChange, onDetachVariant, onGoToPrices,
+  priceOverrides, onPriceOverridesChange, onVariantPriceChange,
+  baseChannelPrices, onBaseChannelPriceChange,
+  positionAvailability,
 }: VariantsTabProps) {
   const [linkedSets, setLinkedSets] = useState<PropertySet[]>(initialSets);
   const [variants, setVariants] = useState<PositionVariant[]>(initialVariants);
@@ -1514,6 +1760,19 @@ export function VariantsTab({
             setEditingVariant(updated);
           }}
           onClose={() => setEditingVariant(null)}
+          priceOverrides={priceOverrides}
+          onPriceOverridesChange={onPriceOverridesChange}
+          onVariantPriceChange={(vid, price) => {
+            onVariantPriceChange?.(vid, price);
+            // Sync local state too
+            const updated = variants.map((v) => v.id === vid ? { ...v, price } : v);
+            setVariants(updated);
+            if (editingVariant?.id === vid) setEditingVariant({ ...editingVariant, price });
+            onChange?.(linkedSets, updated);
+          }}
+          baseChannelPrices={baseChannelPrices}
+          onBaseChannelPriceChange={onBaseChannelPriceChange}
+          positionAvailability={positionAvailability}
         />
       )}
     </div>

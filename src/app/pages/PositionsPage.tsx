@@ -13,6 +13,7 @@ import { PositionEditPanel } from "../components/PositionEditPanel";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { toast } from "../components/shared/Toast";
+import { ChannelIcon } from "../components/shared/ChannelIcon";
 import { getVariantLabel } from "../components/VariantsTab";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,8 +54,8 @@ function ChannelBadges({ pos }: { pos: Position }) {
       ) : (
         <div className="flex flex-wrap gap-1">
           {active.map((c) => (
-            <span key={c.key} title={c.label} className={`text-[9px] px-1.5 py-0.5 rounded-full ${c.color}`}>
-              {c.shortLabel}
+            <span key={c.key} title={c.label} className="inline-flex">
+              <ChannelIcon channel={c.key} size={14} />
             </span>
           ))}
         </div>

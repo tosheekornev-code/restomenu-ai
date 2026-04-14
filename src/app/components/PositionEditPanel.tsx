@@ -17,6 +17,8 @@ import { toast } from "./shared/Toast";
 import { ConfirmDialog } from "./shared/ConfirmDialog";
 import { VariantsTab } from "./VariantsTab";
 import { PricesTab } from "./PricesTab";
+import { countConflictsAgainst } from "./shared/availabilityHelpers";
+import { plural } from "./shared/formatAvailability";
 
 type TabKey = "basic" | "prices" | "variants" | "options" | "availability";
 
@@ -35,9 +37,9 @@ const PRICE_TYPES = [
 const NAV_ITEMS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "basic", label: "Основное", icon: <LayoutGrid size={16} /> },
   { key: "variants", label: "Варианты", icon: <Package size={16} /> },
+  { key: "availability", label: "Доступность", icon: <Globe2 size={16} /> },
   { key: "prices", label: "Цены", icon: <DollarSign size={16} /> },
   { key: "options", label: "Доп. опции", icon: <Puzzle size={16} /> },
-  { key: "availability", label: "Доступность", icon: <Globe2 size={16} /> },
 ];
 
 export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
@@ -63,6 +65,7 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
   const [showConvertDialog, setShowConvertDialog] = useState(false);
 
   const [baseChannelPrices, setBaseChannelPrices] = useState<Record<string, number>>({});
+  const [showBaseChannels, setShowBaseChannels] = useState(false);
 
   const defaultOverrides = position?.priceOverrides
     ?? (position?.priceType === "variants" ? pizzaPriceOverrides
@@ -74,6 +77,20 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
   const [availability, setAvailability] = useState<Availability>(
     position?.availability ?? { everywhere: false, schedule: { type: "daily", allDay: true }, cities: [] }
   );
+
+  // Wraps setAvailability to detect prices that become hidden and show a toast
+  const handleAvailabilityChange = (next: Availability) => {
+    const before = countConflictsAgainst(priceOverrides, baseChannelPrices, availability);
+    const after = countConflictsAgainst(priceOverrides, baseChannelPrices, next);
+    const newlyHidden = after - before;
+    if (newlyHidden > 0) {
+      toast(
+        `Скрыто ${newlyHidden} ${plural(newlyHidden, "особая цена", "особые цены", "особых цен")}. Вернутся при включении.`,
+        "warning"
+      );
+    }
+    setAvailability(next);
+  };
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -498,7 +515,6 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {/* ── PRICES ─────────────────────────────── */}
             {tab === "prices" && (
               <>
-                <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Управление ценами</h2>
                 <PricesTab
                   isVariants={hasVariants}
                   positionName={name || position?.name}
@@ -517,6 +533,9 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
                   onVariantPriceChange={(vid, p) => setVariantList((prev) => prev.map((v) => v.id === vid ? { ...v, price: p } : v))}
                   surcharges={priceSurcharges}
                   onSurchargesChange={setPriceSurcharges}
+                  availability={inheritFromCategory && categoryAvailability ? categoryAvailability : availability}
+                  showBaseChannels={showBaseChannels}
+                  onShowBaseChannelsChange={setShowBaseChannels}
                 />
               </>
             )}
@@ -550,6 +569,16 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
                     toast(`Вариант «${label}» будет создан как отдельный товар`, "success");
                   }}
                   onGoToPrices={() => setTab("prices")}
+                  priceOverrides={priceOverrides}
+                  onPriceOverridesChange={setPriceOverrides}
+                  onVariantPriceChange={(vid, p) => setVariantList((prev) => prev.map((v) => v.id === vid ? { ...v, price: p } : v))}
+                  baseChannelPrices={baseChannelPrices}
+                  onBaseChannelPriceChange={(key, p) => setBaseChannelPrices((prev) => {
+                    const next = { ...prev };
+                    if (p === undefined) delete next[key]; else next[key] = p;
+                    return next;
+                  })}
+                  positionAvailability={inheritFromCategory && categoryAvailability ? categoryAvailability : availability}
                 />
 
                 {showConvertDialog && (
@@ -681,23 +710,16 @@ export function PositionEditPanel({ position, onClose, onSave, isNew }: Props) {
             {tab === "availability" && (
               <>
                 <h2 className="text-[20px] font-semibold text-gray-900 mb-5">Настройки доступности</h2>
-                <div className="space-y-5">
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
-                    <Info size={15} className="text-orange-600 mt-0.5 shrink-0" />
-                    <div className="text-[13px] text-orange-900">
-                      <span className="font-semibold">По умолчанию позиция наследует доступность категории.</span>
-                      {" "}Отключите наследование, чтобы задать индивидуальные настройки для этого товара.
-                    </div>
-                  </div>
-                  <AvailabilitySection
-                    availability={inheritFromCategory && categoryAvailability ? categoryAvailability : availability}
-                    onChange={setAvailability}
-                    showInheritToggle
-                    inherited={inheritFromCategory}
-                    onInheritChange={setInheritFromCategory}
-                    inheritedFromLabel={categoryName}
-                  />
-                </div>
+                <AvailabilitySection
+                  availability={availability}
+                  onChange={handleAvailabilityChange}
+                  showInheritToggle={!!categoryAvailability}
+                  inherited={inheritFromCategory}
+                  onInheritChange={setInheritFromCategory}
+                  inheritedFromLabel={categoryName ? `категории «${categoryName}»` : "категории"}
+                  inheritedAvailability={categoryAvailability}
+                  showSchedule
+                />
               </>
             )}
 

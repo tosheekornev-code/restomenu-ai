@@ -8,6 +8,7 @@ import { CategoryEditPanel } from "../components/CategoryEditPanel";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { toast } from "../components/shared/Toast";
+import { ChannelIcon } from "../components/shared/ChannelIcon";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "../components/ui/table";
@@ -100,9 +101,9 @@ function ChannelChips({ cat }: { cat: Category }) {
   return (
     <div className="flex flex-wrap gap-1">
       {activeChannels.map((c) => (
-        <Badge key={c.key} variant="outline" className={`text-[9px] px-1.5 py-0.5 rounded-full font-normal ${c.color}`}>
-          {c.shortLabel}
-        </Badge>
+        <span key={c.key} title={c.label} className="inline-flex">
+          <ChannelIcon channel={c.key} size={14} />
+        </span>
       ))}
     </div>
   );

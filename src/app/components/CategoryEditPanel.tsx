@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Save, MoreHorizontal, HelpCircle, Plus, Clock } from "lucide-react";
+import { X, Save, MoreHorizontal, HelpCircle, Plus } from "lucide-react";
 import { Category, Availability, categories } from "../data/mockData";
 import { AvailabilitySection } from "./AvailabilitySection";
 import { Switch } from "@/components/ui/switch";
@@ -23,8 +23,6 @@ import {
 import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from "./ui/tooltip";
-import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { cn } from "./ui/utils";
 
 interface Props {
@@ -34,8 +32,6 @@ interface Props {
   isNew?: boolean;
 }
 
-const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-
 export function CategoryEditPanel({ category, onClose, onSave, isNew }: Props) {
   const [tab, setTab] = useState<"basic" | "availability">("basic");
   const [name, setName] = useState(category?.name ?? "");
@@ -43,11 +39,6 @@ export function CategoryEditPanel({ category, onClose, onSave, isNew }: Props) {
   const [urlCode, setUrlCode] = useState(category?.urlCode ?? "");
   const [enabled, setEnabled] = useState(category?.enabled ?? true);
   const [parentId, setParentId] = useState(category?.parentId ?? "none");
-  const [scheduleType, setScheduleType] = useState(category?.availability.schedule.type ?? "daily");
-  const [allDay, setAllDay] = useState(category?.availability.schedule.allDay ?? true);
-  const [activeDays, setActiveDays] = useState<string[]>(["0", "1", "2", "3", "4", "5", "6"]);
-  const [timeFrom, setTimeFrom] = useState("10:00");
-  const [timeTo, setTimeTo] = useState("22:00");
   const [availability, setAvailability] = useState<Availability>(
     category?.availability ?? { everywhere: false, schedule: { type: "daily", allDay: true }, cities: [] }
   );
@@ -69,14 +60,7 @@ export function CategoryEditPanel({ category, onClose, onSave, isNew }: Props) {
       parentId: parentId === "none" ? undefined : parentId,
       photo: category?.photo,
       positionsCount: category?.positionsCount ?? 0,
-      availability: {
-        ...availability,
-        schedule: {
-          type: scheduleType as "daily" | "weekdays" | "dates",
-          allDay,
-          periods: allDay ? undefined : [{ from: timeFrom, to: timeTo }],
-        },
-      },
+      availability,
     };
     onSave(saved);
     toast(`Категория «${saved.name}» сохранена`, "success");
@@ -259,70 +243,11 @@ export function CategoryEditPanel({ category, onClose, onSave, isNew }: Props) {
           {/* ── AVAILABILITY TAB ──────────────────────────────── */}
           {tab === "availability" && (
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="space-y-6">
-                {/* Schedule section */}
-                <div className="border border-border rounded-xl p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Clock size={15} className="text-muted-foreground" />
-                    <h3 className="text-[14px] font-semibold text-foreground">Дни и время показа</h3>
-                  </div>
-
-                  {/* Schedule type — shadcn Tabs (пилюльный контрол) */}
-                  <Tabs value={scheduleType} onValueChange={setScheduleType} className="mb-4">
-                    <TabsList>
-                      <TabsTrigger value="daily" className="text-[12px]">Ежедневно</TabsTrigger>
-                      <TabsTrigger value="weekdays" className="text-[12px]">По дням недели</TabsTrigger>
-                      <TabsTrigger value="dates" className="text-[12px]">По датам</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-
-                  {/* Weekday picker — shadcn ToggleGroup outline */}
-                  {scheduleType === "weekdays" && (
-                    <ToggleGroup
-                      type="multiple"
-                      value={activeDays}
-                      onValueChange={setActiveDays}
-                      variant="outline"
-                      className="justify-start gap-1 mb-4"
-                    >
-                      {WEEKDAYS.map((day, idx) => (
-                        <ToggleGroupItem
-                          key={idx}
-                          value={String(idx)}
-                          className="h-9 w-10 text-[12px] font-medium data-[state=on]:bg-orange-50 data-[state=on]:text-orange-700 data-[state=on]:border-orange-300"
-                        >
-                          {day}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                  )}
-
-                  {/* Time — shadcn RadioGroup */}
-                  <RadioGroup
-                    value={allDay ? "allday" : "period"}
-                    onValueChange={(v) => setAllDay(v === "allday")}
-                    className="flex items-center gap-4"
-                  >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="allday" id="sched-allday" />
-                      <Label htmlFor="sched-allday" className="text-[13px] font-normal cursor-pointer">Весь день</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="period" id="sched-period" />
-                      <Label htmlFor="sched-period" className="text-[13px] font-normal cursor-pointer">Задать период</Label>
-                    </div>
-                    {!allDay && (
-                      <div className="flex items-center gap-2 ml-2">
-                        <Input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} className="w-24 text-[12px] h-8" />
-                        <span className="text-muted-foreground text-[12px]">—</span>
-                        <Input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} className="w-24 text-[12px] h-8" />
-                      </div>
-                    )}
-                  </RadioGroup>
-                </div>
-
-                <AvailabilitySection availability={availability} onChange={setAvailability} />
-              </div>
+              <AvailabilitySection
+                availability={availability}
+                onChange={setAvailability}
+                showSchedule
+              />
             </div>
           )}
 

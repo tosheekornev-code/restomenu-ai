@@ -59,6 +59,8 @@ export interface TimeSchedule {
   type: "daily" | "weekdays" | "dates";
   allDay: boolean;
   periods?: { from: string; to: string }[];
+  weekdays?: number[]; // 0=Mon..6=Sun, used when type==="weekdays"
+  dateRange?: { from: string; to: string }; // ISO date strings, used when type==="dates"
 }
 
 export interface Availability {
@@ -96,7 +98,6 @@ export interface OptionGroup {
   name: string;
   blocks: OptionBlock[];
   enabled: boolean;
-  channels: ChannelAvailability;
 }
 
 export interface OptionBlock {
@@ -105,12 +106,13 @@ export interface OptionBlock {
   displayType: "large-tiles" | "small-tiles" | "list";
   min: number;
   max: number;
-  options: Option[];
+  optionIds: string[];
 }
 
 export interface Option {
   id: string;
   name: string;
+  techName?: string;
   price: number;
   weight?: number;
   weightUnit?: string;
@@ -118,6 +120,10 @@ export interface Option {
   max: number | null;
   enabled: boolean;
   photo?: string;
+  channels?: ChannelAvailability;
+  availability?: Availability;
+  priceOverrides?: PriceOverride[];
+  channelPrices?: Record<string, number>;
 }
 
 export interface Position {
@@ -216,6 +222,11 @@ export interface PriceOverride {
   markup?: MarkupRule;
   // Per-channel markups (optional, override blanket markup for specific channels)
   channelMarkups?: Record<string, MarkupRule>;
+  // Personal markups: per-variant rule that overrides blanket markup for ONE variant
+  variantMarkups?: Record<string, MarkupRule>;
+  // Personal markups by channel: per-variant rule for a specific channel
+  channelVariantMarkups?: Record<string, Record<string, MarkupRule>>;
+  //                              ^channel    ^variantId    ^rule
 }
 
 // ─── STOP LIST ────────────────────────────────────────────────────────────────
@@ -477,78 +488,47 @@ export const categories: Category[] = [
   },
 ];
 
-// ─── OPTION GROUPS ─────────────────────────────────────────────────────────────
+// ─── OPTIONS (flat registry) ──────────────────────────────────────────────────
+export const allOptionsRegistry: Option[] = [
+  { id: "opt-1", name: "Грибы шампиньоны", price: 50, weight: 30, weightUnit: "гр", min: 0, max: 5, enabled: true },
+  { id: "opt-2", name: "Корнишоны", price: 120, weight: 300, weightUnit: "кг", min: 1, max: 0, enabled: true },
+  { id: "opt-3", name: "Маслины", price: 50, weight: 10, weightUnit: "мл", min: 0, max: 10, enabled: true },
+  { id: "opt-4", name: "Бекон", price: 0, min: 0, max: 0, enabled: true },
+  { id: "opt-5", name: "Томатный", price: 0, min: 0, max: 1, enabled: true },
+  { id: "opt-6", name: "Сливочный", price: 0, min: 0, max: 1, enabled: true },
+  { id: "opt-7", name: "Остры", price: 0, min: 0, max: 1, enabled: true },
+  { id: "opt-8", name: "Соевый соус", price: 0, min: 0, max: 1, enabled: true },
+  { id: "opt-9", name: "Унаги", price: 50, min: 0, max: 1, enabled: true },
+  { id: "opt-10", name: "Спайси", price: 0, min: 0, max: 1, enabled: true },
+  { id: "opt-11", name: "Приборы (комплект)", price: 0, min: 0, max: 5, enabled: true },
+  { id: "opt-12", name: "Соус в контейнере", price: 30, min: 0, max: 3, enabled: true },
+];
+
+// ─── OPTION GROUPS (blocks reference options by ID) ───────────────────────────
 export const optionGroups: OptionGroup[] = [
   {
     id: "og-1",
     name: "Для пиццы",
     enabled: true,
-    channels: defaultChannels,
     blocks: [
-      {
-        id: "block-1",
-        name: "Добавьте по вкусу",
-        displayType: "large-tiles",
-        min: 0,
-        max: 10,
-        options: [
-          { id: "opt-1", name: "Грибы шампиньоны", price: 50, weight: 30, weightUnit: "гр", min: 0, max: 5, enabled: true },
-          { id: "opt-2", name: "Корнишоны", price: 120, weight: 300, weightUnit: "кг", min: 1, max: 0, enabled: true },
-          { id: "opt-3", name: "Маслины", price: 50, weight: 10, weightUnit: "мл", min: 0, max: 10, enabled: true },
-          { id: "opt-4", name: "Бекон", price: 0, min: 0, max: 0, enabled: true },
-        ],
-      },
-      {
-        id: "block-2",
-        name: "Выбор соуса",
-        displayType: "small-tiles",
-        min: 1,
-        max: 1,
-        options: [
-          { id: "opt-5", name: "Томатный", price: 0, min: 0, max: 1, enabled: true },
-          { id: "opt-6", name: "Сливочный", price: 0, min: 0, max: 1, enabled: true },
-          { id: "opt-7", name: "Остры", price: 0, min: 0, max: 1, enabled: true },
-        ],
-      },
+      { id: "block-1", name: "Добавьте по вкусу", displayType: "large-tiles", min: 0, max: 10, optionIds: ["opt-1", "opt-2", "opt-3", "opt-4"] },
+      { id: "block-2", name: "Выбор соуса", displayType: "small-tiles", min: 1, max: 1, optionIds: ["opt-5", "opt-6", "opt-7"] },
     ],
   },
   {
     id: "og-2",
     name: "Для роллов",
     enabled: true,
-    channels: { ...defaultChannels, delivery: true, pickup: true },
     blocks: [
-      {
-        id: "block-3",
-        name: "Соус на выбор",
-        displayType: "list",
-        min: 0,
-        max: 3,
-        options: [
-          { id: "opt-8", name: "Соевый соус", price: 0, min: 0, max: 1, enabled: true },
-          { id: "opt-9", name: "Унаги", price: 50, min: 0, max: 1, enabled: true },
-          { id: "opt-10", name: "Спайси", price: 0, min: 0, max: 1, enabled: true },
-        ],
-      },
+      { id: "block-3", name: "Соус на выбор", displayType: "list", min: 0, max: 3, optionIds: ["opt-5", "opt-8", "opt-9", "opt-10"] },
     ],
   },
   {
     id: "og-3",
     name: "Упаковка и доставка",
     enabled: true,
-    channels: deliveryOnlyChannels,
     blocks: [
-      {
-        id: "block-4",
-        name: "Добавьте к заказу",
-        displayType: "list",
-        min: 0,
-        max: 5,
-        options: [
-          { id: "opt-11", name: "Приборы (комплект)", price: 0, min: 0, max: 5, enabled: true },
-          { id: "opt-12", name: "Соус в контейнере", price: 30, min: 0, max: 3, enabled: true },
-        ],
-      },
+      { id: "block-4", name: "Добавьте к заказу", displayType: "list", min: 0, max: 5, optionIds: ["opt-11", "opt-12"] },
     ],
   },
 ];
